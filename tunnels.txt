@@ -1,0 +1,4 @@
+Port 5000: your url is: https://fuzzy-berries-exist.loca.lt
+Port 8000: your url is: https://silly-maps-sit.loca.lt
+Last Updated: 2026-03-08T09:35:00
+10-minute test session started.
