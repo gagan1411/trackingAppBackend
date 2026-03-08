@@ -6,10 +6,12 @@ import AppNavigator from './src/navigation/AppNavigator';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import WelcomeScreen from './src/screens/WelcomeScreen';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
 
   useEffect(() => {
     const setup = async () => {
@@ -21,12 +23,16 @@ export default function App() {
       setIsAuthenticated(!!token);
 
       setIsReady(true);
+
+      setTimeout(() => {
+        setShowWelcome(false);
+      }, 2500);
     };
 
     setup();
   }, []);
 
-  if (!isReady) return null;
+  if (!isReady || showWelcome) return <WelcomeScreen />;
 
   return (
     <SafeAreaProvider>

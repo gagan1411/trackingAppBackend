@@ -13,7 +13,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 const PORT = 8000;
-const TIMEOUT_MS = 10000; // longer timeout for initial ping to wait for render wake
+const TIMEOUT_MS = 4000; // fast timeout so UI doesn't freeze
 
 /**
  * Ping a candidate URL and return it if healthy, or null.
@@ -33,10 +33,10 @@ async function pingServer(baseUrl) {
 }
 
 /**
- * Returns the reachable biometric server URL, or null if none found.
+ * Returns the reachable local biometric server URL, or null if none found.
  */
 export async function getLocalBiometricUrl() {
-    // 1. Check user-configured IP from Settings
+    // 1. Check user-configured IP
     try {
         const saved = await SecureStore.getItemAsync('local_biometric_ip');
         if (saved) {
@@ -46,12 +46,7 @@ export async function getLocalBiometricUrl() {
         }
     } catch (_) { }
 
-    // 2. Try the primary Render Cloud Biometric Server
-    const cloudUrl = 'https://biometric-service-b0vs.onrender.com';
-    const cloudLive = await pingServer(cloudUrl);
-    if (cloudLive) return cloudLive;
-
-    // 3. Fallback to common LAN addresses for the local biometric PC
+    // 2. Try common LAN addresses for the biometric PC
     const candidates = [
         `http://192.168.1.100:${PORT}`,
         `http://192.168.0.100:${PORT}`,
@@ -79,19 +74,17 @@ export async function saveLocalBiometricIp(ip) {
  * Register a face photo with the local LAN biometric server.
  * Returns { success: boolean, embedding: number[]|null, message: string }
  */
-export async function registerFaceLocal(localUrl, userId, base64Image) {
+export async function registerFaceLocal(localUrl, userId, photoUri) {
     try {
-        const payload = {
-            user_id: userId,
-            image: base64Image
-        };
+        let formData = new FormData();
+        formData.append('user_id', userId);
+        formData.append('image', { uri: photoUri, name: 'reg_face.jpg', type: 'image/jpeg' });
 
         const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 60000); // 60s for DeepFace processing
+        const tid = setTimeout(() => controller.abort(), 15000);
         const resp = await fetch(`${localUrl}/register-face`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: formData,
             signal: controller.signal,
         });
         clearTimeout(tid);
@@ -113,16 +106,16 @@ export async function registerFaceLocal(localUrl, userId, base64Image) {
  * Verify a face photo against all registered faces on the local LAN server.
  * Returns { matched: boolean, user_id: string|null, confidence: number, distance: number }
  */
-export async function verifyFaceLocal(localUrl, base64Image) {
+export async function verifyFaceLocal(localUrl, photoUri) {
     try {
-        const payload = { image: base64Image };
+        let formData = new FormData();
+        formData.append('image', { uri: photoUri, name: 'face.jpg', type: 'image/jpeg' });
 
         const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 60000); // 60s for DeepFace verification
+        const tid = setTimeout(() => controller.abort(), 15000);
         const resp = await fetch(`${localUrl}/verify-face`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: formData,
             signal: controller.signal,
         });
         clearTimeout(tid);
@@ -146,7 +139,7 @@ export async function verifyFaceLocal(localUrl, base64Image) {
 export async function registerFingerprintLocal(localUrl, userId, template) {
     try {
         const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 30000);
+        const tid = setTimeout(() => controller.abort(), 8000);
         const resp = await fetch(`${localUrl}/register-fingerprint`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

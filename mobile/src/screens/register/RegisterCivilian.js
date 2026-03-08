@@ -10,13 +10,15 @@ import * as Location from 'expo-location';
 import LeafletMapView from '../../components/LeafletMapView';
 import {
     Camera, MapPin, Shield, Trash2, X, Globe, Search, Navigation,
-    Car, User, Phone, FileText, Home, ChevronDown, Fingerprint, ArrowLeft
+    Car, User, Phone, FileText, Home, ChevronDown, Fingerprint, ArrowLeft, Calendar
 } from 'lucide-react-native';
 import { saveCivilian, saveEntryLog, saveBiometricTemplate } from '../../database/db';
 import PrimeDropdown from '../../components/PrimeDropdown';
 import * as SecureStore from 'expo-secure-store';
 import api from '../../services/api';
 import { getLocalBiometricUrl, registerFaceLocal } from '../../services/localBiometric';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { COUNTRY_CODES } from '../../utils/countryCodes';
 
 // ─── State → Districts Map ────────────────────────────────────────────────────
 const DISTRICTS_BY_STATE = {
@@ -93,8 +95,23 @@ export default function RegisterCivilian({ navigation }) {
     const [name, setName] = useState('');
     const [fatherName, setFatherName] = useState('');
     const [mobile, setMobile] = useState('');
+    const [countryCode, setCountryCode] = useState('🇮🇳 +91');
+    const [countryCodeOptions] = useState(COUNTRY_CODES);
     const [dob, setDob] = useState('');
+    const [dobDate, setDobDate] = useState(new Date(2000, 0, 1));
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [occupation, setOccupation] = useState('');
+
+    const onDateChange = (event, selectedDate) => {
+        setShowDatePicker(false);
+        if (selectedDate) {
+            setDobDate(selectedDate);
+            const day = String(selectedDate.getDate()).padStart(2, '0');
+            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+            const year = selectedDate.getFullYear();
+            setDob(day + '/' + month + '/' + year);
+        }
+    };
 
     // ID Proof
     const [idType, setIdType] = useState('Aadhar');
@@ -309,21 +326,17 @@ export default function RegisterCivilian({ navigation }) {
                 return;
             }
             const result = await ImagePicker.launchCameraAsync({
-                mediaType: ImagePicker.MediaType.Images,
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 quality: 0.7,
-                base64: true, // We need the raw data string for reliable cloud JSON upload!
                 allowsEditing: false, // editing=true causes temp file issues on Android
             });
             if (!result.canceled && result.assets && result.assets[0]) {
                 const srcUri = result.assets[0].uri;
-                const b64Data = result.assets[0].base64;
                 // Copy to app cache so the file persists reliably
                 const fileName = 'photo_' + Date.now() + '.jpg';
                 const destUri = FileSystem.cacheDirectory + fileName;
                 await FileSystem.copyAsync({ from: srcUri, to: destUri });
-                
-                // Store BOTH the file link (for local display) and the raw data (for reliable cloud upload)
-                setCapturedPhoto({ uri: destUri, base64: b64Data });
+                setCapturedPhoto(destUri);
             }
         } catch (e) {
             console.error('Camera error:', e);
@@ -433,10 +446,12 @@ export default function RegisterCivilian({ navigation }) {
         setSaving(true);
         try {
             // ── 1. Save civilian profile to local SQLite ──────────────────────
+            const extractedDialCode = countryCode.split(' ')[1] || countryCode;
+
             const registrationData = {
                 name: name.trim(),
                 fatherName: fatherName.trim(),
-                mobile,
+                mobile: `${extractedDialCode}-${mobile}`,
                 idProof: idType,
                 idNumber: userId,
                 religion,
@@ -455,8 +470,7 @@ export default function RegisterCivilian({ navigation }) {
                 lat: location?.latitude,
                 lon: location?.longitude,
                 photo: capturedPhoto,
-                fingerprintLinked: !!fingerprintTemplate,
-                syncId: Date.now().toString() + '_' + userId
+                fingerprintLinked: !!fingerprintTemplate
             };
 
             await saveCivilian(registrationData);
@@ -492,10 +506,10 @@ export default function RegisterCivilian({ navigation }) {
             });
 
             // ── 5. Background: try LAN server upload (non-blocking) ──────────
-            if (capturedPhoto && capturedPhoto.base64) {
+            if (capturedPhoto) {
                 getLocalBiometricUrl().then(localUrl => {
                     if (localUrl) {
-                        registerFaceLocal(localUrl, userId, capturedPhoto.base64)
+                        registerFaceLocal(localUrl, userId, capturedPhoto)
                             .then(r => console.log('LAN face register:', r.message))
                             .catch(e => console.log('LAN face register skip:', e.message));
                     }
@@ -605,9 +619,23 @@ export default function RegisterCivilian({ navigation }) {
                             <FInput icon={<User />} value={fatherName} onChange={setFatherName} placeholder="Enter father's name" />
 
                             <View style={[styles.row, { zIndex: 3000 }]}>
-                                <View style={{ flex: 1, marginRight: 8 }}>
+                                <View style={{ flex: 1, marginRight: 8, zIndex: 4000 }}>
                                     <FLabel required>DOB</FLabel>
-                                    <FInput value={dob} onChange={setDob} placeholder="DD/MM/YYYY" />
+                                    <TouchableOpacity onPress={() => setShowDatePicker(true)} activeOpacity={0.8}>
+                                        <View pointerEvents="none">
+                                            <FInput value={dob} onChange={setDob} placeholder="DD/MM/YYYY" icon={<Calendar color={GOLD} />} />
+                                        </View>
+                                    </TouchableOpacity>
+                                    {showDatePicker && (
+                                        <DateTimePicker
+                                            value={dobDate}
+                                            mode="date"
+                                            display="default"
+                                            themeVariant="dark"
+                                            onChange={onDateChange}
+                                            maximumDate={new Date()}
+                                        />
+                                    )}
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <FLabel required>RELIGION</FLabel>
@@ -622,21 +650,34 @@ export default function RegisterCivilian({ navigation }) {
                                 </View>
                             </View>
 
-                            <View style={[styles.row, { zIndex: 2000, marginTop: 10 }]}>
-                                <View style={{ flex: 1, marginRight: 8 }}>
-                                    <FLabel>GENDER</FLabel>
-                                    <PrimeDropdown
-                                        value={gender}
-                                        items={genderOptions}
-                                        setValue={setGender}
-                                        placeholder="Select Gender"
-                                        style={styles.dropdownSm}
-                                        textStyle={styles.dropdownText}
-                                    />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <FLabel required>MOBILE NO</FLabel>
-                                    <FInput icon={<Phone />} value={mobile} onChange={setMobile} placeholder="10 Digits" keyboardType="phone-pad" />
+                            <View style={{ zIndex: 2000, marginTop: 10 }}>
+                                <FLabel>GENDER</FLabel>
+                                <PrimeDropdown
+                                    value={gender}
+                                    items={genderOptions}
+                                    setValue={setGender}
+                                    placeholder="Select Gender"
+                                    style={styles.dropdownSm}
+                                    textStyle={styles.dropdownText}
+                                />
+                            </View>
+
+                            <View style={{ zIndex: 3500 }}>
+                                <FLabel required>MOBILE NO</FLabel>
+                                <View style={{ flexDirection: 'row', gap: 8, zIndex: 3500 }}>
+                                    <View style={{ width: 100, zIndex: 4000 }}>
+                                        <PrimeDropdown
+                                            value={countryCode}
+                                            items={countryCodeOptions}
+                                            setValue={setCountryCode}
+                                            placeholder="🇮🇳 +91"
+                                            style={styles.dropdownSm}
+                                            textStyle={styles.dropdownText}
+                                        />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <FInput value={mobile} onChange={setMobile} placeholder="10 Digits" keyboardType="phone-pad" />
+                                    </View>
                                 </View>
                             </View>
 
@@ -666,8 +707,8 @@ export default function RegisterCivilian({ navigation }) {
                             <FLabel style={{ marginTop: 14 }} required>ID NUMBER</FLabel>
                             <FInput icon={<FileText />} value={idNumber} onChange={setIdNumber} placeholder={getIDPlaceholder()} />
 
-                            <FLabel style={{ marginTop: 14 }}>FENCE CARD NO</FLabel>
-                            <FInput icon={<FileText />} value={fenceCardNo} onChange={setFenceCardNo} placeholder="Enter fence card no" />
+                            <FLabel style={{ marginTop: 14 }}>DEFENCE CARD NO</FLabel>
+                            <FInput icon={<FileText />} value={fenceCardNo} onChange={setFenceCardNo} placeholder="Enter defence card no" />
                         </View>
 
                         {/* ── VEHICLES ── */}

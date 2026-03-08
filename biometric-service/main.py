@@ -1,5 +1,4 @@
-from fastapi import FastAPI, UploadFile, Form
-from pydantic import BaseModel
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from deepface import DeepFace
 import sqlite3
@@ -9,19 +8,6 @@ import os
 import json
 
 app = FastAPI()
-
-# Pre-load VGG-Face model to avoid first-request loading latency
-# VGG-Face uses .h5 weights instead of .onnx, bypassing the OpenCV cv2.dnn ONNX format parsing crash
-try:
-    print("Pre-building lightweight VGG-Face model on startup...")
-    DeepFace.build_model("VGG-Face")
-    print("Model loaded successfully!")
-except Exception as e:
-    print(f"Error pre-loading VGG-Face model: {e}")
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "message": "Biometric service is running"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,21 +36,10 @@ def init_db():
 
 init_db()
 
-class FaceRegistration(BaseModel):
-    user_id: str
-    image: str # Base64 encoded JPEG
-
 @app.post("/register-face")
-async def register_face(data: FaceRegistration):
-    import base64
-    
-    user_id = data.user_id
-    base64_str = data.image
-    if base64_str.startswith('data:image'):
-        base64_str = base64_str.split(',')[1]
-
-    img_data = base64.b64decode(base64_str)
-    nparr = np.frombuffer(img_data, np.uint8)
+async def register_face(user_id: str = Form(...), image: UploadFile = File(...)):
+    contents = await image.read()
+    nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     # Save temp image for DeepFace
@@ -72,8 +47,8 @@ async def register_face(data: FaceRegistration):
     cv2.imwrite(temp_path, img)
 
     try:
-        # Get face embedding using VGG-Face 
-        embedding_objs = DeepFace.represent(img_path=temp_path, model_name="VGG-Face", enforce_detection=False)
+        # Get face embedding using Facenet512 (more accurate than standard Facenet)
+        embedding_objs = DeepFace.represent(img_path=temp_path, model_name="Facenet512", enforce_detection=False)
         embedding = embedding_objs[0]["embedding"]
         
         # Store embedding in DB
@@ -94,27 +69,18 @@ async def register_face(data: FaceRegistration):
             os.remove(temp_path)
         return {"status": "error", "message": f"DeepFace error: {str(e)}"}
 
-class FaceVerification(BaseModel):
-    image: str # Base64 encoded JPEG
-
 @app.post("/verify-face")
-async def verify_face(data: FaceVerification):
-    import base64
-    
-    base64_str = data.image
-    if base64_str.startswith('data:image'):
-        base64_str = base64_str.split(',')[1]
-
-    img_data = base64.b64decode(base64_str)
-    nparr = np.frombuffer(img_data, np.uint8)
+async def verify_face(image: UploadFile = File(...)):
+    contents = await image.read()
+    nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     temp_path = "temp_verify.jpg"
     cv2.imwrite(temp_path, img)
 
     try:
-        # Use VGG-Face for verification
-        embedding_objs = DeepFace.represent(img_path=temp_path, model_name="VGG-Face", enforce_detection=False)
+        # Use Facenet512 for verification too
+        embedding_objs = DeepFace.represent(img_path=temp_path, model_name="Facenet512", enforce_detection=False)
         candidate_embedding = np.array(embedding_objs[0]["embedding"])
 
         conn = sqlite3.connect(DB_PATH)
@@ -125,8 +91,9 @@ async def verify_face(data: FaceVerification):
 
         best_match = None
         max_similarity = -1.0
-        # Cosine similarity threshold for VGG-Face
-        SIMILARITY_THRESHOLD = 0.60 
+        # Cosine similarity threshold (0.4 is generally strict for Facenet512 cosine distance, 
+        # but similarity [1-distance] > 0.6 is good)
+        SIMILARITY_THRESHOLD = 0.65 
 
         for row in rows:
             user_id = row[0]

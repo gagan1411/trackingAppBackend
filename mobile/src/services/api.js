@@ -2,11 +2,11 @@ import { Alert } from 'react-native';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const DEFAULT_API_URL = 'https://backend-e4a6.onrender.com/api';
+const DEFAULT_API_URL = 'https://pink-news-smoke.loca.lt/api';
 
 const api = axios.create({
     baseURL: DEFAULT_API_URL,
-    timeout: 30000, // 30 seconds timeout for remote connections
+    timeout: 10000, // 10 seconds timeout for remote connections
 });
 
 api.interceptors.request.use(async (config) => {
