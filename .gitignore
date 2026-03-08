@@ -1,0 +1,68 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Sub-projects Node Modules
+backend/node_modules/
+biometric-service/node_modules/
+mobile/node_modules/
+
+# Android (React Native)
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/bundle/
+mobile/android/generated/
+
+# iOS (React Native)
+mobile/ios/build/
+mobile/ios/Pods/
+mobile/ios/DerivedData/
+*.xcworkspace/
+!mobile/ios/Podfile
+!mobile/ios/Podfile.lock
+
+# Expo
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Specific
+*.db
+*.sqlite
+*.sqlite3
+backend/requests.log
+biometric-service/python_log.txt
+biometric-service/uploads/
+mobile/build_info*.json
+mobile/build_info*.txt
+hs_err_pid*.log
+replay_pid*.log
+tunnel*.txt
+tunnels.txt
+login_res.json
+login_test*.json
+login_verification.json
+
+# Git
+.git/
+**/ .git/
+
+# OS
+.DS_Store
+Thumbs.db
