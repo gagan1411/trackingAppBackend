@@ -18,6 +18,7 @@ import api from "../services/api";
 import * as SecureStore from "expo-secure-store";
 import { registerLocalOperator, loginLocalOperator } from "../database/db";
 import { testCloudConnection } from "../services/geminiService";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const GOLD = "#c5a059";
 const DARK = "#0b0f14";
@@ -28,6 +29,8 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
+  const [dobDate, setDobDate] = useState(new Date(2000, 0, 1));
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [email, setEmail] = useState("");
   const [contact, setContact] = useState("");
   const [username, setUsername] = useState("");
@@ -54,6 +57,17 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
       setShowSettings(true);
     } else {
       setTapCount(newCount);
+    }
+  };
+
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDobDate(selectedDate);
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const year = selectedDate.getFullYear();
+      setDob(day + '/' + month + '/' + year);
     }
   };
 
@@ -283,16 +297,29 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
                   <>
                     <View style={styles.inputContainer}>
                       <Text style={styles.label}>Date of Birth <Text style={styles.required}>*</Text></Text>
-                      <View style={styles.inputWrapper}>
-                        <Calendar color="rgba(255,255,255,0.5)" size={20} style={styles.inputIcon} />
-                        <TextInput
-                          placeholder="DD/MM/YYYY"
-                          placeholderTextColor="rgba(255,255,255,0.6)"
-                          style={styles.boxInputWithIcon}
-                          value={dob}
-                          onChangeText={setDob}
+                      <TouchableOpacity onPress={() => setShowDatePicker(true)} activeOpacity={0.8}>
+                        <View style={styles.inputWrapper} pointerEvents="none">
+                          <Calendar color="rgba(255,255,255,0.5)" size={20} style={styles.inputIcon} />
+                          <TextInput
+                            placeholder="DD/MM/YYYY"
+                            placeholderTextColor="rgba(255,255,255,0.6)"
+                            style={styles.boxInputWithIcon}
+                            value={dob}
+                            onChangeText={setDob}
+                            editable={false}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                      {showDatePicker && (
+                        <DateTimePicker
+                          value={dobDate}
+                          mode="date"
+                          display="default"
+                          themeVariant="dark"
+                          onChange={onDateChange}
+                          maximumDate={new Date()}
                         />
-                      </View>
+                      )}
                     </View>
 
                     <View style={styles.inputContainer}>
@@ -407,18 +434,6 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
                   </LinearGradient>
                 </TouchableOpacity>
 
-                {/* 🧪 Skip Login (Test Mode) */}
-                {isLogin && (
-                  <TouchableOpacity
-                    style={[styles.button, { marginTop: 15 }]}
-                    onPress={() => setIsAuthenticated(true)}
-                  >
-                    <View style={[styles.pillButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: GOLD }]}>
-                      <Text style={[styles.buttonText, { color: GOLD }]}>SKIP LOGIN (TEST MODE)</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-
                 {/* 🔑 Forgot Password (login only) */}
                 {isLogin && (
                   <TouchableOpacity
@@ -513,9 +528,6 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>RESET PASSWORD</Text>
-              <Text style={[styles.label, { marginBottom: 8, opacity: 0.7, fontSize: 12, textAlign: 'center' }]}>
-                Enter your username and set a new password
-              </Text>
 
               <Text style={styles.label}>Username</Text>
               <TextInput
@@ -792,10 +804,12 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnText: {
     color: "#000",
     fontWeight: "bold",
+    textAlign: "center",
   },
   closeBtn: {
     flex: 1,
@@ -803,8 +817,11 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
+    justifyContent: "center",
   },
   closeBtnText: {
     color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
   },
 });

@@ -63,7 +63,7 @@ export default function PrimeDropdown({ value, items, setValue, placeholder, sty
 
                         <FlatList
                             data={filtered}
-                            keyExtractor={(item) => item.value}
+                            keyExtractor={(item, index) => item.value + index.toString()}
                             showsVerticalScrollIndicator={true}
                             keyboardShouldPersistTaps="handled"
                             ListEmptyComponent={
