@@ -57,8 +57,14 @@ router.post('/approve', auth, async (req, res) => {
 // Register single civilian (remotely from registration form)
 router.post('/register', auth, async (req, res) => {
     try {
+        const civilianInfo = req.body;
+        // Generate a new syncId if it wasn't provided by the client
+        if (!civilianInfo.syncId) {
+            civilianInfo.syncId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+
         const civilian = new Civilian({
-            ...req.body,
+            ...civilianInfo,
             userId: req.user.id
         });
         await civilian.save();
