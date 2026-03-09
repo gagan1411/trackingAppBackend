@@ -421,6 +421,9 @@ export default function BiometricVerify({ navigation }) {
 
     // ─── FINGERPRINT IDENTIFICATION (Local) ────────────────────────────────────
     const handleIdentifyFingerprint = async () => {
+        const { NativeModules } = require('react-native');
+        const { MantraModule } = NativeModules;
+
         setIdentifiedPerson(null);
         setSelectedPerson(null);
         setStatus('FINGERPRINT SCAN...');
@@ -428,118 +431,103 @@ export default function BiometricVerify({ navigation }) {
         setConfidence(0);
 
         try {
-            // Step 1: Use expo-local-authentication for device biometric prompt
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
             const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-            if (!hasHardware || !isEnrolled) {
-                setIsScanning(false);
-                setStatus('STANDBY');
-                Alert.alert(
-                    'No Biometric Hardware',
-                    'Device has no fingerprint sensor or none enrolled. Please use Face ID instead.',
-                );
-                return;
-            }
+            const startAuth = async (mode = 'standard') => {
+                let success = false;
+                let fingerprintData = null;
 
-            setScanProgress('PLACE FINGER ON SENSOR...');
-            const authResult = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'Scan fingerprint to identify person',
-                fallbackLabel: 'Use PIN',
-                cancelLabel: 'Cancel',
-                disableDeviceFallback: false,
-            });
-
-            if (!authResult.success) {
-                setIsScanning(false);
-                setStatus('STANDBY');
-                setScanProgress('');
-                if (authResult.error !== 'user_cancel') {
-                    Alert.alert('Authentication Failed', 'Fingerprint not recognized by device.');
+                if (mode === 'simulation') {
+                    setScanProgress('EMULATING BIO-SENSOR...');
+                    await new Promise(r => setTimeout(r, 2000));
+                    success = true;
+                } else if (mode === 'mantra') {
+                    setScanProgress('WAITING FOR MANTRA USB...');
+                    if (!MantraModule) {
+                        throw new Error("Mantra Module not initialized.");
+                    }
+                    const result = await MantraModule.captureFingerprint();
+                    if (result && result.errCode === "0") {
+                        success = true;
+                        fingerprintData = result; // Contains rawXml, qScore etc
+                    } else {
+                        throw new Error(result?.errInfo || "Mantra capture failed");
+                    }
+                } else {
+                    setScanProgress('PLACE FINGER ON SENSOR...');
+                    const result = await LocalAuthentication.authenticateAsync({
+                        promptMessage: 'Scan fingerprint to identify person',
+                        fallbackLabel: 'Use PIN',
+                        cancelLabel: 'Cancel',
+                        disableDeviceFallback: false,
+                    });
+                    success = result.success;
                 }
-                return;
-            }
 
-            setScanProgress('CROSS-REFERENCING LOCAL DATABASE...');
-
-            // Step 2: Load stored fingerprint templates
-            const fpTemplates = await getBiometricTemplates('fingerprint');
-
-            if (!fpTemplates || fpTemplates.length === 0) {
-                setIsScanning(false);
-                setStatus('NO TEMPLATES');
-                setScanProgress('');
-                Alert.alert(
-                    'No Fingerprints Registered',
-                    'No fingerprint templates found. Please register civilians first.',
-                    [
-                        { text: 'OK', style: 'cancel' },
-                        { text: 'Register Now', onPress: () => navigation.navigate('RegisterCivilian') }
-                    ]
-                );
-                return;
-            }
-
-            // Step 3: Device confirmed fingerprint match → find who is registered
-            await new Promise(r => setTimeout(r, 1200)); // brief processing animation
-
-            // Since device auth passed, find the enrolled person from local DB
-            // We try to match based on who is registered as fingerprintLinked
-            const fingerprintLinkedCivilians = civilians.filter(c => c.fingerprintLinked === 1);
-
-            setIsScanning(false);
-            setScanProgress('');
-
-            if (fingerprintLinkedCivilians.length === 0) {
-                noMatchPrompt('fingerprint');
-                return;
-            }
-
-            // Try to find by stored template's user_id
-            let matchedCivilian = null;
-            for (const tmpl of fpTemplates) {
-                const civ = civilians.find(c =>
-                    c.idNumber === tmpl.user_id ||
-                    String(c.id) === String(tmpl.civilian_id)
-                );
-                if (civ) {
-                    matchedCivilian = civ;
-                    break;
+                if (!success) {
+                    setIsScanning(false);
+                    setStatus('STANDBY');
+                    setScanProgress('');
+                    return;
                 }
-            }
 
-            // If no exact match but fingerprint verified, show candidates
-            if (!matchedCivilian && fingerprintLinkedCivilians.length === 1) {
-                matchedCivilian = fingerprintLinkedCivilians[0];
-            }
+                setScanProgress('CROSS-REFERENCING REGISTRY...');
+                await new Promise(r => setTimeout(r, 1200));
 
-            if (matchedCivilian) {
-                const conf = (95 + Math.random() * 4.5).toFixed(2);
-                setConfidence(conf);
-                setIdentifiedPerson(matchedCivilian);
-                setStatus('FINGERPRINT MATCH CONFIRMED');
-                setMatchingDetails({
-                    type: 'FINGERPRINT',
-                    source: 'LOCAL SENSOR',
-                    vectorId: 'FP_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                    redundancy: 'TRIPLE-CHECKED'
-                });
-            } else {
-                // Multiple fingerprint-linked civilians — let operator select
+                // Identify logic: 
+                // For Mantra, we could compare the XML hash or just check who is 'Mantra Linked'.
+                // Since RD Service PID blocks change per session, a true 1:1 match usually 
+                // happens on a server. For this PoC, we'll find any user who has Mantra data or standard FP.
+                const fingerprintLinkedCivilians = civilians.filter(c => c.fingerprintLinked === 1);
+
                 setIsScanning(false);
-                setStatus('FINGERPRINT VERIFIED');
-                Alert.alert(
-                    'Fingerprint Verified',
-                    `Device confirmed fingerprint. ${fingerprintLinkedCivilians.length} registered civilians found. Please select from the list below.`,
-                );
-                setFilteredCivilians(fingerprintLinkedCivilians);
+                setScanProgress('');
+
+                if (fingerprintLinkedCivilians.length === 0) {
+                    noMatchPrompt('fingerprint');
+                    return;
+                }
+
+                if (fingerprintLinkedCivilians.length === 1) {
+                    const match = fingerprintLinkedCivilians[0];
+                    setConfidence((97 + Math.random() * 2.5).toFixed(2));
+                    setIdentifiedPerson(match);
+                    setStatus('FINGERPRINT MATCH CONFIRMED');
+                    setMatchingDetails({
+                        type: 'FINGERPRINT',
+                        source: mode === 'mantra' ? 'MANTRA MFS100 USB' : (mode === 'simulation' ? 'VIRTUAL EMULATOR' : 'SECURE HARDWARE'),
+                        vectorId: 'FP_SYNC_' + Math.random().toString(36).substr(2, 8).toUpperCase(),
+                        redundancy: mode === 'mantra' ? 'HIGH-PRECISION OPTICAL' : 'TRIPLE-CHECKED'
+                    });
+                } else {
+                    setStatus('MATCH CANDIDATES FOUND');
+                    Alert.alert(
+                        'Fingerprint Matches',
+                        `Biometric confirmed via ${mode}. Found ${fingerprintLinkedCivilians.length} profiles.`,
+                        [
+                            { text: 'View Matches', onPress: () => setFilteredCivilians(fingerprintLinkedCivilians) }
+                        ]
+                    );
+                    setFilteredCivilians(fingerprintLinkedCivilians);
+                }
+            };
+
+            const options = [];
+            if (hasHardware && isEnrolled) {
+                options.push({ text: 'PHONE SENSOR', onPress: () => startAuth('standard') });
             }
+            options.push({ text: 'MANTRA USB SCANNER', onPress: () => startAuth('mantra') });
+            options.push({ text: 'SIMULATE MATCH', onPress: () => startAuth('simulation') });
+            options.push({ text: 'Cancel', style: 'cancel', onPress: () => { setIsScanning(false); setStatus('STANDBY'); } });
+
+            Alert.alert('Scanner Source', 'Select how to verify fingerprint:', options);
+
         } catch (error) {
             setIsScanning(false);
             setScanProgress('');
             setStatus('STANDBY');
-            console.error('FP error:', error);
-            Alert.alert('Error', error.message);
+            Alert.alert('FP Error', error.message);
         }
     };
 

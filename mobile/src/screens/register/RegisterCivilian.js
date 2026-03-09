@@ -350,49 +350,80 @@ export default function RegisterCivilian({ navigation }) {
     // We store a unique token locally; the device sensor confirms the scan.
     const handleBiometricEnroll = async () => {
         const { LocalAuthentication } = require('expo-local-authentication');
+        const { NativeModules } = require('react-native');
+        const { MantraModule } = NativeModules;
+
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-        if (!hasHardware || !isEnrolled) {
-            Alert.alert(
-                'No Fingerprint Sensor',
-                'Your device does not have a fingerprint sensor or none are enrolled in Settings.'
-            );
-            return;
+        const startEnrollment = async (mode = 'standard') => {
+            setSaving(true);
+            try {
+                let success = false;
+                let fingerprintId = '';
+
+                if (mode === 'simulation') {
+                    await new Promise(r => setTimeout(r, 1500));
+                    success = true;
+                    fingerprintId = 'SIM_' + Date.now();
+                } else if (mode === 'mantra') {
+                    if (!MantraModule) {
+                        throw new Error("Mantra Module not initialized in this build.");
+                    }
+                    const result = await MantraModule.captureFingerprint();
+                    if (result && result.errCode === "0") {
+                        success = true;
+                        // Use XML hash or qScore as part of the token
+                        fingerprintId = 'MANTRA_' + result.qScore + '_' + Date.now();
+                        // For Mantra, we store the full XML in a specific field if needed, 
+                        // but for identification we'll use a token.
+                        setFingerprintTemplate(result.rawXml); // Store raw XML as template
+                    } else {
+                        throw new Error(result?.errInfo || "Mantra capture failed");
+                    }
+                } else {
+                    const result = await LocalAuthentication.authenticateAsync({
+                        promptMessage: 'Scan civilian fingerprint for enrollment',
+                        cancelLabel: 'Cancel',
+                        disableDeviceFallback: true,
+                    });
+                    success = result.success;
+                    fingerprintId = 'HW_' + Date.now();
+                }
+
+                if (success) {
+                    if (mode !== 'mantra') {
+                        const token = 'FP_LINKED_' + fingerprintId + '_' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                        setFingerprintTemplate(token);
+                    }
+                    setFingerprintImage('enrolled');
+
+                    const title = mode === 'simulation' ? '✅ VIRTUAL LINKED' : (mode === 'mantra' ? '✅ MANTRA CAPTURED' : '✅ Enrolled');
+                    const msg = mode === 'simulation'
+                        ? 'Mock Fingerprint ID generated for testing.'
+                        : (mode === 'mantra' ? 'High-quality Mantra fingerprint data saved.' : 'Fingerprint captured and stored locally.');
+
+                    Alert.alert(title, msg);
+                }
+            } catch (e) {
+                Alert.alert('Scanner Error', e.message);
+            } finally {
+                setSaving(false);
+            }
+        };
+
+        const options = [];
+        if (hasHardware && isEnrolled) {
+            options.push({ text: 'PHONE SENSOR', onPress: () => startEnrollment('standard') });
         }
+        options.push({ text: 'MANTRA USB SCANNER', onPress: () => startEnrollment('mantra') });
+        options.push({ text: 'VIRTUAL (SIMULATE)', onPress: () => startEnrollment('simulation') });
+        options.push({ text: 'Cancel', style: 'cancel' });
 
         Alert.alert(
-            'Fingerprint Enrollment',
-            'Ask the civilian to place their finger on the scanner. The device will capture the fingerprint.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'START SCAN',
-                    onPress: async () => {
-                        setSaving(true);
-                        try {
-                            const result = await LocalAuthentication.authenticateAsync({
-                                promptMessage: 'Scan civilian fingerprint for enrollment',
-                                cancelLabel: 'Cancel',
-                                disableDeviceFallback: true,
-                            });
-                            if (result.success) {
-                                // Generate a unique template token for this enrollment
-                                const token = 'FP_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9).toUpperCase();
-                                setFingerprintTemplate(token);
-                                setFingerprintImage('enrolled');
-                                Alert.alert('✅ Enrolled', 'Fingerprint captured and stored locally.');
-                            } else {
-                                Alert.alert('Scan Failed', 'Fingerprint not recognized. Please try again.');
-                            }
-                        } catch (e) {
-                            Alert.alert('Error', e.message);
-                        } finally {
-                            setSaving(false);
-                        }
-                    }
-                }
-            ]
+            'Select Biometric Source',
+            'How would you like to capture the fingerprint?',
+            options
         );
     };
 
