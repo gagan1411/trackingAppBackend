@@ -9,7 +9,9 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo-google-fonts/great-vibes": "^0.4.1",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.6.0",
     "@react-native-community/geolocation": "^3.4.0",
     "@react-native-community/netinfo": "^11.5.2",
     "@react-native-picker/picker": "^2.11.4",
@@ -17,8 +19,11 @@
     "@react-navigation/stack": "^7.8.2",
     "axios": "^1.13.6",
     "expo": "~55.0.4",
+    "expo-av": "^16.0.8",
     "expo-camera": "~55.0.9",
     "expo-file-system": "~55.0.10",
+    "expo-font": "^55.0.4",
+    "expo-image": "~55.0.6",
     "expo-image-manipulator": "~55.0.9",
     "expo-image-picker": "~55.0.10",
     "expo-linear-gradient": "~55.0.8",

@@ -10,6 +10,7 @@ import {
     Download, CheckCircle, Map as MapIcon,
     Search, Globe, X, Compass, Layers, Shield, ArrowLeft
 } from 'lucide-react-native';
+import galuta from "../../../assets/Galuta/GalutaLandmarks.json";
 
 const GOLD = '#C5A059';
 const DARK = '#0B0F14';
@@ -31,11 +32,29 @@ export default function OfflineMap({ navigation }) {
         { id: 2, name: 'HANDWARA MAIN', size: '8.1 MB', date: '2024-02-18' }
     ]);
 
+    // Patrol / checkpoint markers across the region
+    // const PATROL_POINTS = [
+    //     { lat: 34.5262, lng: 74.2546, label: 'HQ KUPWARA', color: '#C5A059' },
+    //     { lat: 34.3920, lng: 74.3140, label: 'CP HANDWARA', color: '#4FC3F7' },
+    //     { lat: 34.0900, lng: 74.7970, label: 'BASE SRINAGAR', color: '#8BC34A' },
+    //     { lat: 34.4400, lng: 74.1500, label: 'OP TANGDHAR', color: '#FF7043' },
+    //     { lat: 34.5800, lng: 74.3500, label: 'FP KERAN', color: '#FF7043' },
+    //     { lat: 34.6500, lng: 74.1800, label: 'TEETWAL POST', color: '#FF7043' },
+    //     { lat: 34.2950, lng: 74.6200, label: 'PATROL ALPHA', color: '#4FC3F7' },
+    //     { lat: 34.1600, lng: 74.4300, label: 'PATROL BRAVO', color: '#4FC3F7' },
+    // ];
+
+    const PATROL_POINTS = galuta.features.map((feature) => ({
+        lat: feature.geometry.coordinates[1],
+        lng: feature.geometry.coordinates[0],
+        label: feature.properties.Name,
+    }));
+
     const [region, setRegion] = useState({
-        latitude: 34.5262,
-        longitude: 74.2546,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
+        latitude: 34.35,
+        longitude: 74.35,
+        latitudeDelta: 0.5,
+        longitudeDelta: 0.5,
     });
 
     useEffect(() => {
@@ -201,10 +220,17 @@ export default function OfflineMap({ navigation }) {
                                 style={styles.map}
                                 latitude={region.latitude}
                                 longitude={region.longitude}
-                                zoom={14}
+                                zoom={10}
+                                markers={PATROL_POINTS}
                                 markerLat={region.latitude}
                                 markerLng={region.longitude}
                                 mapType={mapType === 'satellite' ? 'satellite' : 'street'}
+                                onMarkerPress={({ index }) => {
+                                    const feature = galuta.features[index];
+                                    if (feature) {
+                                        navigation.navigate('LandmarkDetail', { feature });
+                                    }
+                                }}
                             />
                             <View style={styles.mapBadge}>
                                 <Text style={styles.badgeText}>{mapType.toUpperCase()} FEED</Text>

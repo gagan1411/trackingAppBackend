@@ -10,6 +10,7 @@ import RegisterCivilian from '../screens/register/RegisterCivilian';
 import CivilianList from '../screens/register/CivilianList';
 import BiometricVerify from '../screens/biometric/BiometricVerify';
 import OfflineMap from '../screens/map/OfflineMap';
+import LandmarkDetail from '../screens/map/LandmarkDetail';
 import CensusMode from '../screens/census/CensusMode';
 import AddCensusData from '../screens/census/AddCensusData';
 import DailySummary from '../screens/logs/DailySummary';
@@ -36,6 +37,7 @@ export default function AppNavigator({ isAuthenticated, setIsAuthenticated }) {
                     <Stack.Screen name="CivilianList" component={CivilianList} />
                     <Stack.Screen name="BiometricVerify" component={BiometricVerify} />
                     <Stack.Screen name="OfflineMap" component={OfflineMap} />
+                    <Stack.Screen name="LandmarkDetail" component={LandmarkDetail} />
                     <Stack.Screen name="CensusMode" component={CensusMode} />
                     <Stack.Screen name="AddCensusData" component={AddCensusData} />
                     <Stack.Screen name="DailySummary" component={DailySummary} />

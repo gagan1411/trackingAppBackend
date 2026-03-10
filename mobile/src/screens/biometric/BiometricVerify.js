@@ -16,6 +16,7 @@ import { getLocalBiometricUrl } from '../../services/localBiometric';
 import { identifyInBatch } from '../../services/geminiService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
+import { Image } from 'react-native';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GOLD = '#C5A059';
@@ -421,9 +422,6 @@ export default function BiometricVerify({ navigation }) {
 
     // ─── FINGERPRINT IDENTIFICATION (Local) ────────────────────────────────────
     const handleIdentifyFingerprint = async () => {
-        const { NativeModules } = require('react-native');
-        const { MantraModule } = NativeModules;
-
         setIdentifiedPerson(null);
         setSelectedPerson(null);
         setStatus('FINGERPRINT SCAN...');
@@ -442,18 +440,6 @@ export default function BiometricVerify({ navigation }) {
                     setScanProgress('EMULATING BIO-SENSOR...');
                     await new Promise(r => setTimeout(r, 2000));
                     success = true;
-                } else if (mode === 'mantra') {
-                    setScanProgress('WAITING FOR MANTRA USB...');
-                    if (!MantraModule) {
-                        throw new Error("Mantra Module not initialized.");
-                    }
-                    const result = await MantraModule.captureFingerprint();
-                    if (result && result.errCode === "0") {
-                        success = true;
-                        fingerprintData = result; // Contains rawXml, qScore etc
-                    } else {
-                        throw new Error(result?.errInfo || "Mantra capture failed");
-                    }
                 } else {
                     setScanProgress('PLACE FINGER ON SENSOR...');
                     const result = await LocalAuthentication.authenticateAsync({
@@ -476,9 +462,6 @@ export default function BiometricVerify({ navigation }) {
                 await new Promise(r => setTimeout(r, 1200));
 
                 // Identify logic: 
-                // For Mantra, we could compare the XML hash or just check who is 'Mantra Linked'.
-                // Since RD Service PID blocks change per session, a true 1:1 match usually 
-                // happens on a server. For this PoC, we'll find any user who has Mantra data or standard FP.
                 const fingerprintLinkedCivilians = civilians.filter(c => c.fingerprintLinked === 1);
 
                 setIsScanning(false);
@@ -496,9 +479,9 @@ export default function BiometricVerify({ navigation }) {
                     setStatus('FINGERPRINT MATCH CONFIRMED');
                     setMatchingDetails({
                         type: 'FINGERPRINT',
-                        source: mode === 'mantra' ? 'MANTRA MFS100 USB' : (mode === 'simulation' ? 'VIRTUAL EMULATOR' : 'SECURE HARDWARE'),
+                        source: mode === 'simulation' ? 'VIRTUAL EMULATOR' : 'SECURE HARDWARE',
                         vectorId: 'FP_SYNC_' + Math.random().toString(36).substr(2, 8).toUpperCase(),
-                        redundancy: mode === 'mantra' ? 'HIGH-PRECISION OPTICAL' : 'TRIPLE-CHECKED'
+                        redundancy: 'TRIPLE-CHECKED'
                     });
                 } else {
                     setStatus('MATCH CANDIDATES FOUND');
@@ -517,7 +500,6 @@ export default function BiometricVerify({ navigation }) {
             if (hasHardware && isEnrolled) {
                 options.push({ text: 'PHONE SENSOR', onPress: () => startAuth('standard') });
             }
-            options.push({ text: 'MANTRA USB SCANNER', onPress: () => startAuth('mantra') });
             options.push({ text: 'SIMULATE MATCH', onPress: () => startAuth('simulation') });
             options.push({ text: 'Cancel', style: 'cancel', onPress: () => { setIsScanning(false); setStatus('STANDBY'); } });
 
@@ -765,73 +747,103 @@ export default function BiometricVerify({ navigation }) {
                         {/* Result Card */}
                         {person && (
                             <View style={styles.resultCard}>
-                                <View style={styles.resultHeader}>
-                                    <View style={styles.avatarId}>
-                                        <User color={GOLD} size={24} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.resultName}>{person.name.toUpperCase()}</Text>
-                                        <View style={styles.neuralBadge}>
-                                            <NeuralIcon size={12} color={GREEN_ACCENT} />
-                                            <Text style={styles.neuralBadgeText}>
-                                                {matchingDetails?.source || 'LOCAL'} • {confidence}% MATCH
-                                            </Text>
-                                        </View>
-                                        {matchingDetails && (
-                                            <View style={styles.matchingDetailBox}>
-                                                {matchingDetails.type === 'FACIAL RECOGNITION' ? (
-                                                    <View style={{ gap: 2 }}>
-                                                        <Text style={styles.matchingDetailText}>SOURCE: {matchingDetails.source}</Text>
-                                                        <Text style={styles.matchingDetailText}>OCULAR: {matchingDetails.ocular}</Text>
-                                                        <Text style={styles.matchingDetailText}>NASAL BRIDGE: {matchingDetails.nasal}</Text>
-                                                        <Text style={styles.matchingDetailText}>SYMMETRY: {matchingDetails.symmetry}</Text>
-                                                        <Text style={[styles.matchingDetailText, { marginTop: 4 }]}>HASH: {matchingDetails.neuralHash}</Text>
-                                                    </View>
-                                                ) : (
-                                                    <View style={{ gap: 2 }}>
-                                                        <Text style={styles.matchingDetailText}>SOURCE: {matchingDetails.source}</Text>
-                                                        <Text style={styles.matchingDetailText}>V-ID: {matchingDetails.vectorId}</Text>
-                                                        <Text style={styles.matchingDetailText}>CHECK: {matchingDetails.redundancy}</Text>
-                                                    </View>
-                                                )}
-                                            </View>
+
+                                {/* HEADER */}
+                                <View style={styles.resultHeaderCenter}>
+                                    <View style={styles.personPhoto}>
+                                        {person.photo ? (
+                                        <Image
+                                            source={{ uri: person.photo }}
+                                            style={styles.personImage}
+                                        />
+                                        ) : (
+                                        <User color={GOLD} size={40} />
                                         )}
                                     </View>
-                                </View>
 
+                                    <Text style={styles.resultName}>
+                                        {person.name?.toUpperCase()}
+                                    </Text>
+
+                                    <View style={styles.neuralBadge}>
+                                        <NeuralIcon size={14} color={GREEN_ACCENT} />
+                                        <Text style={styles.neuralBadgeText}>
+                                        {matchingDetails?.source || 'LOCAL'} • {confidence}% MATCH
+                                        </Text>
+                                    </View>
+
+                                    </View>
+
+                                {/* MATCH DETAILS */}
+                                {/* {matchingDetails && (
+                                <View style={styles.matchingDetailBox}>
+                                    <Text style={styles.sectionTitle}>MATCH ANALYSIS</Text>
+
+                                    {matchingDetails.type === "FACIAL RECOGNITION" ? (
+                                    <>
+                                        <Text style={styles.matchingDetailText}>SOURCE : {matchingDetails.source}</Text>
+                                        <Text style={styles.matchingDetailText}>OCULAR : {matchingDetails.ocular}</Text>
+                                        <Text style={styles.matchingDetailText}>NASAL : {matchingDetails.nasal}</Text>
+                                        <Text style={styles.matchingDetailText}>SYMMETRY : {matchingDetails.symmetry}</Text>
+
+                                        <Text style={styles.hashText}>
+                                        HASH : {matchingDetails.neuralHash}
+                                        </Text>
+                                    </>
+                                    ) : (
+                                    <>
+                                        <Text style={styles.matchingDetailText}>SOURCE : {matchingDetails.source}</Text>
+                                        <Text style={styles.matchingDetailText}>VECTOR ID : {matchingDetails.vectorId}</Text>
+                                        <Text style={styles.matchingDetailText}>REDUNDANCY : {matchingDetails.redundancy}</Text>
+                                    </>
+                                    )}
+                                </View>
+                                )} */}
+
+                                {/* PERSON DETAILS */}
                                 <View style={styles.personInfoGrid}>
-                                    {person.village ? <InfoRow label="VILLAGE" value={person.village} /> : null}
-                                    {person.district ? <InfoRow label="DISTRICT" value={person.district} /> : null}
-                                    {person.idProof ? <InfoRow label="ID TYPE" value={person.idProof} /> : null}
-                                    {person.idNumber ? <InfoRow label="ID NUMBER" value={person.idNumber} /> : null}
-                                    {person.mobile ? <InfoRow label="MOBILE" value={person.mobile} /> : null}
-                                    {person.occupation ? <InfoRow label="OCCUPATION" value={person.occupation} /> : null}
+                                {person.village && <InfoRow label="VILLAGE" value={person.village} />}
+                                {person.district && <InfoRow label="DISTRICT" value={person.district} />}
+                                {person.idProof && <InfoRow label="ID TYPE" value={person.idProof} />}
+                                {person.idNumber && <InfoRow label="ID NUMBER" value={person.idNumber} />}
+                                {person.mobile && <InfoRow label="MOBILE" value={person.mobile} />}
+                                {person.occupation && <InfoRow label="OCCUPATION" value={person.occupation} />}
                                 </View>
 
+                                {/* ACTION BUTTONS */}
                                 <View style={styles.resultActions}>
-                                    <TouchableOpacity style={styles.actionBtnIn} onPress={() => onAction('Entry')}>
-                                        <Text style={styles.actionBtnText}>MARK ENTRY</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.actionBtnOut} onPress={() => onAction('Exit')}>
-                                        <Text style={styles.actionBtnText}>MARK EXIT</Text>
-                                    </TouchableOpacity>
-                                </View>
+                                <TouchableOpacity
+                                    style={styles.actionBtnIn}
+                                    onPress={() => onAction("Entry")}
+                                >
+                                    <Text style={styles.actionBtnText}>MARK ENTRY</Text>
+                                </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={styles.clearBtn}
-                                    onPress={() => {
-                                        setIdentifiedPerson(null);
-                                        setSelectedPerson(null);
-                                        setStatus('STANDBY');
-                                        setMatchingDetails(null);
-                                        setConfidence(0);
-                                        loadData();
-                                    }}
+                                    style={styles.actionBtnOut}
+                                    onPress={() => onAction("Exit")}
                                 >
-                                    <Text style={styles.clearBtnText}>ABORT IDENTIFICATION</Text>
+                                    <Text style={styles.actionBtnText}>MARK EXIT</Text>
                                 </TouchableOpacity>
+                                </View>
+
+                                {/* ABORT */}
+                                <TouchableOpacity
+                                style={styles.clearBtn}
+                                onPress={() => {
+                                    setIdentifiedPerson(null);
+                                    setSelectedPerson(null);
+                                    setStatus("STANDBY");
+                                    setMatchingDetails(null);
+                                    setConfidence(0);
+                                    loadData();
+                                }}
+                                >
+                                <Text style={styles.clearBtnText}>ABORT IDENTIFICATION</Text>
+                                </TouchableOpacity>
+
                             </View>
-                        )}
+                            )}
 
                         {/* Manual Search */}
                         {!person && (
@@ -1087,8 +1099,8 @@ const styles = StyleSheet.create({
     matchingDetailText: { color: GOLD, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
     personInfoGrid: { marginBottom: 20, gap: 6 },
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-    infoLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
-    infoValue: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+    infoLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
+    infoValue: { color: '#FFF', fontSize: 16, fontWeight: '600' },
     resultActions: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, gap: 15 },
     actionBtnIn: {
         backgroundColor: GREEN_ACCENT, padding: 20, borderRadius: 15, flex: 1, alignItems: 'center',
@@ -1178,4 +1190,35 @@ const styles = StyleSheet.create({
     triggerBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: BORDER },
     triggerBtnActive: { backgroundColor: GREEN_ACCENT, borderColor: GREEN_ACCENT },
     triggerBtnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+    resultHeaderCenter: {
+        alignItems: "center",
+        marginBottom: 18
+      },
+      
+      personPhoto: {
+        width: 110,
+        height: 110,
+        borderRadius: 55,
+        backgroundColor: "#111",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 10,
+        borderWidth: 2,
+        borderColor: GOLD
+      },
+      
+      personImage: {
+        width: "100%",
+        height: "100%",
+        borderRadius: 55
+      },
+      
+      resultName: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: "#FFF",
+        letterSpacing: 1,
+        textAlign: "center",
+        marginBottom: 6
+      }
 });

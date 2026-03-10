@@ -233,7 +233,7 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1,backgroundColor: DARK }}>
       <StatusBar barStyle="light-content" backgroundColor={DARK} />
 
       <ImageBackground
@@ -585,6 +585,7 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
 const styles = StyleSheet.create({
   background: {
     flex: 1,
+    backgroundColor: "#000",
   },
 
   overlay: {

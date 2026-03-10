@@ -60,6 +60,46 @@ const DISTRICTS_BY_STATE = {
     'Lakshadweep': ['Lakshadweep'],
 };
 
+const TEHSILS_BY_DISTRICT_JK = {
+    'Anantnag': ['Anantnag', 'Bijbehara', 'Dooru', 'Kokernag', 'Pahalgam', 'Shangus'],
+    'Bandipora': ['Bandipora', 'Gurez', 'Sumbal', 'Tulail'],
+    'Baramulla': ['Baramulla', 'Boniyar', 'Kreeri', 'Pattan', 'Rafiabad', 'Rouwara', 'Sopore', 'Tangmarg', 'Uri'],
+    'Budgam': ['Beerwah', 'Budgam', 'Chadoora', 'Khansahib', 'Narbal'],
+    'Doda': ['Bhaderwah', 'Doda', 'Gandoh', 'Thathri'],
+    'Ganderbal': ['Ganderbal', 'Kangan', 'Tullamulla'],
+    'Jammu': ['Jammu', 'Akhnoor', 'Ranbir Singh Pora', 'Bishnah'],
+    'Kathua': ['Basholi', 'Bhoond', 'Billawar', 'Diglipur', 'Hiranagar', 'Kathua', 'Lakhanpur'],
+    'Kishtwar': ['Atholi', 'Chhatroo', 'Kishtwar', 'Sarhati', 'Warwan'],
+    'Kulgam': ['Kulgam', 'D.H.Pora', 'Yaripora'],
+    'Kupwara': ['Drugmula', 'Handwara', 'Kupwara', 'Lolab', 'Sogam', 'Trehgam'],
+    'Poonch': ['Haveli', 'Mendhar', 'Poonch'],
+    'Pulwama': ['Pampore', 'Pulwama', 'Qazigund', 'Rajpora', 'Tral'],
+    'Rajouri': ['Darhal', 'Kalakote', 'Manjakote', 'Nowshera', 'Rajouri', 'Sunderbani', 'Thanamandi'],
+    'Ramban': ['Banhal', 'Batote', 'Gool', 'Ramban', 'Ramsoo'],
+    'Reasi': ['Mahore', 'Pouni', 'Reasi'],
+    'Samba': ['Samba', 'Vijaypur'],
+    'Shopian': ['Shopian', 'Keller'],
+    'Srinagar': ['Srinagar'],
+    'Udhampur': ['Chenani', 'Gulabgarh', 'Katra', 'Majalta', 'Ramnagar', 'Udhampur'],
+};
+
+const occupationOptions = [
+    { label: 'Farmer', value: 'Farmer' },
+    { label: 'Shopkeeper', value: 'Shopkeeper' },
+    { label: 'Daily Wage Laborer', value: 'Daily Wage Laborer' },
+    { label: 'Government Employee', value: 'Government Employee' },
+    { label: 'Private Employee', value: 'Private Employee' },
+    { label: 'Business Owner', value: 'Business Owner' },
+    { label: 'Student', value: 'Student' },
+    { label: 'Housewife', value: 'Housewife' },
+    { label: 'Retired', value: 'Retired' },
+    { label: 'Unemployed', value: 'Unemployed' },
+    { label: 'Other', value: 'Other' }
+];
+
+
+
+
 // Normalize state name from geocoding response to match our state list
 const normalizeState = (raw) => {
     if (!raw) return null;
@@ -100,7 +140,7 @@ export default function RegisterCivilian({ navigation }) {
     const [dob, setDob] = useState('');
     const [dobDate, setDobDate] = useState(new Date(2000, 0, 1));
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [occupation, setOccupation] = useState('');
+    // const [occupation, setOccupation] = useState(null);
 
     const onDateChange = (event, selectedDate) => {
         setShowDatePicker(false);
@@ -130,8 +170,7 @@ export default function RegisterCivilian({ navigation }) {
     const [religion, setReligion] = useState(null);
     const [openReligion, setOpenReligion] = useState(false);
     const [religionOptions] = useState([
-        { label: 'Sunni Muslim', value: 'Sunni Muslim' },
-        { label: 'Shia Muslim', value: 'Shia Muslim' },
+        { label: 'Muslim', value: 'Muslim' },
         { label: 'Hindu', value: 'Hindu' },
         { label: 'Sikh', value: 'Sikh' },
         { label: 'Christian', value: 'Christian' },
@@ -239,6 +278,8 @@ export default function RegisterCivilian({ navigation }) {
     const [tehsil, setTehsil] = useState('');
     const [village, setVillage] = useState('');
     const [houseDetails, setHouseDetails] = useState('');
+    const [occupation, setOccupation] = useState(null);  // Change from string to null
+    
 
     // Update district options when state changes
     useEffect(() => {
@@ -350,8 +391,6 @@ export default function RegisterCivilian({ navigation }) {
     // We store a unique token locally; the device sensor confirms the scan.
     const handleBiometricEnroll = async () => {
         const { LocalAuthentication } = require('expo-local-authentication');
-        const { NativeModules } = require('react-native');
-        const { MantraModule } = NativeModules;
 
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -366,21 +405,6 @@ export default function RegisterCivilian({ navigation }) {
                     await new Promise(r => setTimeout(r, 1500));
                     success = true;
                     fingerprintId = 'SIM_' + Date.now();
-                } else if (mode === 'mantra') {
-                    if (!MantraModule) {
-                        throw new Error("Mantra Module not initialized in this build.");
-                    }
-                    const result = await MantraModule.captureFingerprint();
-                    if (result && result.errCode === "0") {
-                        success = true;
-                        // Use XML hash or qScore as part of the token
-                        fingerprintId = 'MANTRA_' + result.qScore + '_' + Date.now();
-                        // For Mantra, we store the full XML in a specific field if needed, 
-                        // but for identification we'll use a token.
-                        setFingerprintTemplate(result.rawXml); // Store raw XML as template
-                    } else {
-                        throw new Error(result?.errInfo || "Mantra capture failed");
-                    }
                 } else {
                     const result = await LocalAuthentication.authenticateAsync({
                         promptMessage: 'Scan civilian fingerprint for enrollment',
@@ -392,16 +416,14 @@ export default function RegisterCivilian({ navigation }) {
                 }
 
                 if (success) {
-                    if (mode !== 'mantra') {
-                        const token = 'FP_LINKED_' + fingerprintId + '_' + Math.random().toString(36).substr(2, 6).toUpperCase();
-                        setFingerprintTemplate(token);
-                    }
+                    const token = 'FP_LINKED_' + fingerprintId + '_' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                    setFingerprintTemplate(token);
                     setFingerprintImage('enrolled');
 
-                    const title = mode === 'simulation' ? '✅ VIRTUAL LINKED' : (mode === 'mantra' ? '✅ MANTRA CAPTURED' : '✅ Enrolled');
+                    const title = mode === 'simulation' ? '✅ VIRTUAL LINKED' : '✅ ENROLLED';
                     const msg = mode === 'simulation'
                         ? 'Mock Fingerprint ID generated for testing.'
-                        : (mode === 'mantra' ? 'High-quality Mantra fingerprint data saved.' : 'Fingerprint captured and stored locally.');
+                        : 'Fingerprint captured and stored locally.';
 
                     Alert.alert(title, msg);
                 }
@@ -416,7 +438,6 @@ export default function RegisterCivilian({ navigation }) {
         if (hasHardware && isEnrolled) {
             options.push({ text: 'PHONE SENSOR', onPress: () => startEnrollment('standard') });
         }
-        options.push({ text: 'MANTRA USB SCANNER', onPress: () => startEnrollment('mantra') });
         options.push({ text: 'VIRTUAL (SIMULATE)', onPress: () => startEnrollment('simulation') });
         options.push({ text: 'Cancel', style: 'cancel' });
 
@@ -713,7 +734,15 @@ export default function RegisterCivilian({ navigation }) {
                             </View>
 
                             <FLabel required>OCCUPATION</FLabel>
-                            <FInput icon={<Shield />} value={occupation} onChange={setOccupation} placeholder="e.g. Resident / Farmer" />
+                            <PrimeDropdown
+                                value={occupation}
+                                items={occupationOptions}
+                                setValue={setOccupation}
+                                placeholder="Select Occupation"
+                                style={styles.dropdownSm}
+                                textStyle={styles.dropdownText}
+                            />
+                            {/* <FInput icon={<Shield />} value={occupation} onChange={setOccupation} placeholder="e.g. Resident / Farmer" /> */}
 
                             <FLabel>OTHER PHYSIOLOGICAL CHARACTERISTICS</FLabel>
                             <FInput value={physiologicalCharacteristics} onChange={setPhysiologicalCharacteristics} placeholder="Marks, Height, etc." />
@@ -738,8 +767,8 @@ export default function RegisterCivilian({ navigation }) {
                             <FLabel style={{ marginTop: 14 }} required>ID NUMBER</FLabel>
                             <FInput icon={<FileText />} value={idNumber} onChange={setIdNumber} placeholder={getIDPlaceholder()} />
 
-                            <FLabel style={{ marginTop: 14 }}>DEFENCE CARD NO</FLabel>
-                            <FInput icon={<FileText />} value={fenceCardNo} onChange={setFenceCardNo} placeholder="Enter defence card no" />
+                            <FLabel style={{ marginTop: 14 }}>FENCE CARD NO</FLabel>
+                            <FInput icon={<FileText />} value={fenceCardNo} onChange={setFenceCardNo} placeholder="Enter fence card no" />
                         </View>
 
                         {/* ── VEHICLES ── */}
@@ -792,7 +821,19 @@ export default function RegisterCivilian({ navigation }) {
                             />
 
                             <FLabel required>TEHSIL</FLabel>
-                            <FInput icon={<MapPin />} value={tehsil} onChange={setTehsil} placeholder="Tehsil" />
+                                {state === 'Jammu & Kashmir' ? (
+                                    <PrimeDropdown
+                                        value={tehsil}
+                                        items={TEHSILS_BY_DISTRICT_JK[district] ? TEHSILS_BY_DISTRICT_JK[district].map(t => ({ label: t, value: t })) : []}
+                                        setValue={setTehsil}
+                                        placeholder={district ? `Select Tehsil in ${district}` : 'Select District first'}
+                                        style={styles.dropdownSm}
+                                        textStyle={styles.dropdownText}
+                                    />
+                                    ) : (
+                                    <FInput iconMapPin value={tehsil} onChange={setTehsil} placeholder="Tehsil" />
+                                )}
+                            {/* <FInput icon={<MapPin />} value={tehsil} onChange={setTehsil} placeholder="Tehsil" /> */}
 
                             <FLabel required>VILLAGE</FLabel>
                             <FInput icon={<MapPin />} value={village} onChange={setVillage} placeholder="Enter village name" />
