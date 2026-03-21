@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const DEFAULT_API_URL = 'https://pink-news-smoke.loca.lt/api';
+const DEFAULT_API_URL = 'http://172.20.10.7:5000/api';
 
 const api = axios.create({
     baseURL: DEFAULT_API_URL,
@@ -10,10 +10,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-    // Dynamically set baseURL if user configured one
-    const customUrl = await SecureStore.getItemAsync('server_url');
-    if (customUrl) {
+    // Dynamically set baseURL if user configured one (Ignoring dead localtunnels!)
+    let customUrl = await SecureStore.getItemAsync('server_url');
+    if (customUrl && !customUrl.includes('localtunnel.me')) {
         config.baseURL = customUrl.endsWith('/api') ? customUrl : `${customUrl}/api`;
+    } else {
+        config.baseURL = DEFAULT_API_URL;
     }
 
     const token = await SecureStore.getItemAsync('token');

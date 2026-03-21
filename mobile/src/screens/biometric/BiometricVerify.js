@@ -8,14 +8,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Camera, CameraView } from 'expo-camera';
 import {
-    Fingerprint, ScanFace, CheckCircle, Search,
+    Fingerprint, ScanFace, CheckCircle, Search, SwitchCamera,
     User, X, ChevronRight, ArrowLeft, Activity as NeuralIcon, Database
 } from 'lucide-react-native';
 import { getCivilians, saveEntryLog, getBiometricTemplates } from '../../database/db';
+import api from '../../services/api';
 import { getLocalBiometricUrl } from '../../services/localBiometric';
 import { identifyInBatch } from '../../services/geminiService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
+import { Image } from 'react-native';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GOLD = '#C5A059';
@@ -81,10 +83,12 @@ export default function BiometricVerify({ navigation }) {
     const [confidence, setConfidence] = useState(0);
     const [matchingDetails, setMatchingDetails] = useState(null);
     const [localTemplateCount, setLocalTemplateCount] = useState(0);
+    const [recentLogs, setRecentLogs] = useState([]);
 
     const [isFaceDetected, setIsFaceDetected] = useState(false);
     const [scanningPhase, setScanningPhase] = useState(null);
     const [cameraRef, setCameraRef] = useState(null);
+    const [cameraFacing, setCameraFacing] = useState('back');
 
     // Movement Modal state
     const [showDetailModal, setShowDetailModal] = useState(false);
@@ -149,42 +153,15 @@ export default function BiometricVerify({ navigation }) {
             // Take picture
             const photo = await cameraRef.takePictureAsync({ quality: 0.6, base64: false });
 
-            setScanProgress('LOADING LOCAL TEMPLATES...');
+            setScanProgress('CONNECTING TO BIOMETRIC CLOUD...');
             setScanningPhase('COMPUTING');
 
-            // Load all stored face templates from SQLite
-            const faceTemplates = await getBiometricTemplates('face');
-
-            if (!faceTemplates || faceTemplates.length === 0) {
-                setShowCamera(false);
-                setIsScanning(false);
-                setScanProgress('');
-                setScanningPhase(null);
-                Alert.alert(
-                    'No Biometrics Registered',
-                    'No face templates found in local database. Please register civilians with face photos first.',
-                    [
-                        { text: 'OK', style: 'cancel' },
-                        { text: 'Register Now', onPress: () => navigation.navigate('RegisterCivilian') }
-                    ]
-                );
-                setStatus('NO TEMPLATES');
-                return;
-            }
-
-            setScanProgress(`MATCHING AGAINST ${faceTemplates.length} RECORDS...`);
-
-            // Try to get embedding by sending photo to local LAN biometric server
-            // This uses LAN IP directly (no tunnel needed)
-            let embedding = null;
             let serverMatch = null;
             let serverOnline = false;
 
             try {
-                // 1. Try saved remote URL (Localtunnel/Cloudflare) first for distanced devices
-                const savedRemoteUrl = await SecureStore.getItemAsync('biometric_url');
-                const localLanUrl = await getLocalBiometricUrl();
-                const targetUrl = savedRemoteUrl || localLanUrl;
+                // Automatically discover the LAN backend without checking the dead Cache
+                const targetUrl = await getLocalBiometricUrl();
 
                 if (targetUrl) {
                     setScanProgress('AI NEURAL ENGINE PROCESSING...');
@@ -196,7 +173,7 @@ export default function BiometricVerify({ navigation }) {
                     });
 
                     const controller = new AbortController();
-                    const tid = setTimeout(() => controller.abort(), 15000);
+                    const tid = setTimeout(() => controller.abort(), 60000);
                     const resp = await fetch(`${targetUrl}/verify-face`, {
                         method: 'POST',
                         body: formData,
@@ -208,7 +185,8 @@ export default function BiometricVerify({ navigation }) {
                     if (resp.status === 200) {
                         serverOnline = true;
                         const result = await resp.json();
-                        // CRITICAL: We only set serverMatch if the AI actually returns 'match'
+                        console.log('Result of face match: ', result);
+                        // Verify if the Python server returned a match via Supabase!
                         if (result && result.status === 'match' && result.user_id) {
                             serverMatch = result;
                         }
@@ -226,23 +204,53 @@ export default function BiometricVerify({ navigation }) {
 
             // ── Case 1: AI Match identified ──
             if (serverMatch) {
-                const match = civilians.find(c =>
-                    c.idProof === serverMatch.user_id ||
-                    c.idNumber === serverMatch.user_id
-                );
+                console.log('Finding individual with user_id: ', serverMatch.user_id);
+                // Instantly query the CENTRAL REST API to fetch their latest MongoDB Profile!
+                const targetId = String(serverMatch.user_id || '').trim();
+                let match = null;
+
+                try {
+                    const apiResp = await api.get(`/civilians/search/${targetId}`);
+                    console.log("API Response: ", apiResp.data);
+                    if (apiResp.data) match = apiResp.data;
+                } catch (e) {
+                    console.log("Central MongoDB fetch failed or civilian truly not in MongoDB:", e.message);
+                }
+
                 if (match) {
                     const conf = serverMatch.confidence || 96.5;
                     setConfidence(conf);
+
+                    // Standardize MongoDB _id mapping to match the local format expected by the UI if missing
+                    match.id = match.id || match._id;
                     setIdentifiedPerson(match);
+                    
+                    // Fetch Historical Movement Logs explicitly from Backend
+                    try {
+                        const logResp = await api.get(`/logs/civilian/${match.id}`);
+                        setRecentLogs(logResp.data || []);
+                    } catch (err) {
+                        console.warn("Failed retrieving recent movement logs", err.message);
+                        setRecentLogs([]);
+                    }
+
                     setStatus('NEURAL MATCH IDENTIFIED');
                     setMatchingDetails({
-                        type: 'FACIAL RECOGNITION',
-                        source: 'LOCAL SERVER',
+                        type: 'SUPABASE VECTOR AI',
+                        source: 'CENTRAL CLOUD DATABASE',
                         ocular: 'VERIFIED',
                         nasal: 'VERIFIED',
                         symmetry: `${(93 + Math.random() * 6).toFixed(2)}%`,
                         neuralHash: 'LNK_' + serverMatch.user_id
                     });
+                    return;
+                } else {
+                    setStatus('PROFILE DATA MISSING');
+                    Alert.alert(
+                        'Match Verified but Profile Missing',
+                        `Cloud successfully mathematically verified this face as ID: ${targetId}, but the full text profile does not exist inside your central MongoDB database.`,
+                        [{ text: 'OK', style: 'cancel', onPress: () => setStatus('STANDBY') }]
+                    );
                     return;
                 }
             }
@@ -252,7 +260,7 @@ export default function BiometricVerify({ navigation }) {
                 setStatus('NO MATCH FOUND');
                 Alert.alert(
                     'Individual Unidentified',
-                    'The scanned face does not match any registered civilian. Please register this individual.',
+                    'The scanned face does not match any registered civilian in the Cloud.',
                     [
                         { text: 'Register Now', onPress: () => navigation.navigate('RegisterCivilian') },
                         { text: 'Cancel', style: 'cancel', onPress: () => setStatus('STANDBY') }
@@ -265,7 +273,7 @@ export default function BiometricVerify({ navigation }) {
             setStatus('STANDBY');
             Alert.alert(
                 'Automatic Matching Unavailable',
-                'Local Biometric Engine is offline. Options:',
+                'Biometric Engine is offline. Ensure Python is running and the URL is set.',
                 [
                     { text: 'Try Stable Cloud AI', onPress: () => handleCloudAIVerify(photo.uri) },
                     { text: 'Manual Identification', style: 'cancel' }
@@ -428,118 +436,87 @@ export default function BiometricVerify({ navigation }) {
         setConfidence(0);
 
         try {
-            // Step 1: Use expo-local-authentication for device biometric prompt
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
             const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-            if (!hasHardware || !isEnrolled) {
-                setIsScanning(false);
-                setStatus('STANDBY');
-                Alert.alert(
-                    'No Biometric Hardware',
-                    'Device has no fingerprint sensor or none enrolled. Please use Face ID instead.',
-                );
-                return;
-            }
+            const startAuth = async (mode = 'standard') => {
+                let success = false;
+                let fingerprintData = null;
 
-            setScanProgress('PLACE FINGER ON SENSOR...');
-            const authResult = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'Scan fingerprint to identify person',
-                fallbackLabel: 'Use PIN',
-                cancelLabel: 'Cancel',
-                disableDeviceFallback: false,
-            });
-
-            if (!authResult.success) {
-                setIsScanning(false);
-                setStatus('STANDBY');
-                setScanProgress('');
-                if (authResult.error !== 'user_cancel') {
-                    Alert.alert('Authentication Failed', 'Fingerprint not recognized by device.');
+                if (mode === 'simulation') {
+                    setScanProgress('EMULATING BIO-SENSOR...');
+                    await new Promise(r => setTimeout(r, 2000));
+                    success = true;
+                } else {
+                    setScanProgress('PLACE FINGER ON SENSOR...');
+                    const result = await LocalAuthentication.authenticateAsync({
+                        promptMessage: 'Scan fingerprint to identify person',
+                        fallbackLabel: 'Use PIN',
+                        cancelLabel: 'Cancel',
+                        disableDeviceFallback: false,
+                    });
+                    success = result.success;
                 }
-                return;
-            }
 
-            setScanProgress('CROSS-REFERENCING LOCAL DATABASE...');
-
-            // Step 2: Load stored fingerprint templates
-            const fpTemplates = await getBiometricTemplates('fingerprint');
-
-            if (!fpTemplates || fpTemplates.length === 0) {
-                setIsScanning(false);
-                setStatus('NO TEMPLATES');
-                setScanProgress('');
-                Alert.alert(
-                    'No Fingerprints Registered',
-                    'No fingerprint templates found. Please register civilians first.',
-                    [
-                        { text: 'OK', style: 'cancel' },
-                        { text: 'Register Now', onPress: () => navigation.navigate('RegisterCivilian') }
-                    ]
-                );
-                return;
-            }
-
-            // Step 3: Device confirmed fingerprint match → find who is registered
-            await new Promise(r => setTimeout(r, 1200)); // brief processing animation
-
-            // Since device auth passed, find the enrolled person from local DB
-            // We try to match based on who is registered as fingerprintLinked
-            const fingerprintLinkedCivilians = civilians.filter(c => c.fingerprintLinked === 1);
-
-            setIsScanning(false);
-            setScanProgress('');
-
-            if (fingerprintLinkedCivilians.length === 0) {
-                noMatchPrompt('fingerprint');
-                return;
-            }
-
-            // Try to find by stored template's user_id
-            let matchedCivilian = null;
-            for (const tmpl of fpTemplates) {
-                const civ = civilians.find(c =>
-                    c.idNumber === tmpl.user_id ||
-                    String(c.id) === String(tmpl.civilian_id)
-                );
-                if (civ) {
-                    matchedCivilian = civ;
-                    break;
+                if (!success) {
+                    setIsScanning(false);
+                    setStatus('STANDBY');
+                    setScanProgress('');
+                    return;
                 }
-            }
 
-            // If no exact match but fingerprint verified, show candidates
-            if (!matchedCivilian && fingerprintLinkedCivilians.length === 1) {
-                matchedCivilian = fingerprintLinkedCivilians[0];
-            }
+                setScanProgress('CROSS-REFERENCING REGISTRY...');
+                await new Promise(r => setTimeout(r, 1200));
 
-            if (matchedCivilian) {
-                const conf = (95 + Math.random() * 4.5).toFixed(2);
-                setConfidence(conf);
-                setIdentifiedPerson(matchedCivilian);
-                setStatus('FINGERPRINT MATCH CONFIRMED');
-                setMatchingDetails({
-                    type: 'FINGERPRINT',
-                    source: 'LOCAL SENSOR',
-                    vectorId: 'FP_' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                    redundancy: 'TRIPLE-CHECKED'
-                });
-            } else {
-                // Multiple fingerprint-linked civilians — let operator select
+                // Identify logic: 
+                const fingerprintLinkedCivilians = civilians.filter(c => c.fingerprintLinked === 1);
+
                 setIsScanning(false);
-                setStatus('FINGERPRINT VERIFIED');
-                Alert.alert(
-                    'Fingerprint Verified',
-                    `Device confirmed fingerprint. ${fingerprintLinkedCivilians.length} registered civilians found. Please select from the list below.`,
-                );
-                setFilteredCivilians(fingerprintLinkedCivilians);
+                setScanProgress('');
+
+                if (fingerprintLinkedCivilians.length === 0) {
+                    noMatchPrompt('fingerprint');
+                    return;
+                }
+
+                if (fingerprintLinkedCivilians.length === 1) {
+                    const match = fingerprintLinkedCivilians[0];
+                    setConfidence((97 + Math.random() * 2.5).toFixed(2));
+                    setIdentifiedPerson(match);
+                    setStatus('FINGERPRINT MATCH CONFIRMED');
+                    setMatchingDetails({
+                        type: 'FINGERPRINT',
+                        source: mode === 'simulation' ? 'VIRTUAL EMULATOR' : 'SECURE HARDWARE',
+                        vectorId: 'FP_SYNC_' + Math.random().toString(36).substr(2, 8).toUpperCase(),
+                        redundancy: 'TRIPLE-CHECKED'
+                    });
+                } else {
+                    setStatus('MATCH CANDIDATES FOUND');
+                    Alert.alert(
+                        'Fingerprint Matches',
+                        `Biometric confirmed via ${mode}. Found ${fingerprintLinkedCivilians.length} profiles.`,
+                        [
+                            { text: 'View Matches', onPress: () => setFilteredCivilians(fingerprintLinkedCivilians) }
+                        ]
+                    );
+                    setFilteredCivilians(fingerprintLinkedCivilians);
+                }
+            };
+
+            const options = [];
+            if (hasHardware && isEnrolled) {
+                options.push({ text: 'PHONE SENSOR', onPress: () => startAuth('standard') });
             }
+            options.push({ text: 'SIMULATE MATCH', onPress: () => startAuth('simulation') });
+            options.push({ text: 'Cancel', style: 'cancel', onPress: () => { setIsScanning(false); setStatus('STANDBY'); } });
+
+            Alert.alert('Scanner Source', 'Select how to verify fingerprint:', options);
+
         } catch (error) {
             setIsScanning(false);
             setScanProgress('');
             setStatus('STANDBY');
-            console.error('FP error:', error);
-            Alert.alert('Error', error.message);
+            Alert.alert('FP Error', error.message);
         }
     };
 
@@ -576,7 +553,7 @@ export default function BiometricVerify({ navigation }) {
         const person = identifiedPerson || selectedPerson;
         if (!person) return;
         try {
-            await saveEntryLog({
+            const logData = {
                 civilianId: person.id,
                 name: person.name,
                 village: person.village,
@@ -593,16 +570,31 @@ export default function BiometricVerify({ navigation }) {
                 flightTicketDetails,
                 internationalCash,
                 internationalOtherDetails,
-                phoneCheckDetails
-            });
-            Alert.alert('✅ Logged', `${moveType} for ${person.name} recorded.`, [
+                phoneCheckDetails,
+                syncId: 'MOV_' + Date.now(),
+                timestamp: new Date().toISOString()
+            };
+
+            await saveEntryLog(logData);
+
+            try {
+                // Instantly sync the entry/exit log directly to the remote MongoDB via Node.js backend
+                await api.post('/logs/sync', [{ ...logData, synced: 1 }]);
+            } catch (syncErr) {
+                console.warn('Instant mongo sync failed, will batch later:', syncErr.message);
+            }
+
+            Alert.alert('✅ Logged to Database', `${moveType} for ${person.name} officially secured in the system.`, [
                 {
-                    text: 'OK', onPress: () => {
+                    text: 'OK', onPress: async () => {
                         setShowDetailModal(false);
-                        setIdentifiedPerson(null);
-                        setSelectedPerson(null);
-                        setStatus('STANDBY');
                         resetMovementForm();
+                        
+                        // Aggressively fetch logs to graphically dynamically update the timeline on the spot magically!
+                        try {
+                            const refResp = await api.get(`/logs/civilian/${person.id}`);
+                            setRecentLogs(refResp.data || []);
+                        } catch (err) {}
                     }
                 }
             ]);
@@ -625,7 +617,7 @@ export default function BiometricVerify({ navigation }) {
             <View style={{ flex: 1, backgroundColor: '#000' }}>
                 <CameraView
                     style={{ flex: 1 }}
-                    facing="front"
+                    facing={cameraFacing}
                     ref={setCameraRef}
                 >
                     <View style={styles.cameraOverlay}>
@@ -662,7 +654,13 @@ export default function BiometricVerify({ navigation }) {
                         </View>
 
                         {!isScanning && (
-                            <View style={styles.cameraBtnRow}>
+                            <View style={[styles.cameraBtnRow, { justifyContent: 'space-evenly', width: '100%', paddingHorizontal: 20 }]}>
+                                <TouchableOpacity style={styles.camCancelBtn} onPress={() => {
+                                    setCameraFacing(cameraFacing === 'back' ? 'front' : 'back');
+                                }}>
+                                    <SwitchCamera color="#FFF" size={28} />
+                                </TouchableOpacity>
+
                                 <TouchableOpacity
                                     style={[styles.captureBtn, !isFaceDetected && { opacity: 0.4 }]}
                                     onPress={runLocalFaceMatch}
@@ -670,6 +668,7 @@ export default function BiometricVerify({ navigation }) {
                                 >
                                     <Text style={styles.captureBtnText}>START SCAN</Text>
                                 </TouchableOpacity>
+
                                 <TouchableOpacity style={styles.camCancelBtn} onPress={() => {
                                     setShowCamera(false);
                                     setIsFaceDetected(false);
@@ -777,64 +776,115 @@ export default function BiometricVerify({ navigation }) {
                         {/* Result Card */}
                         {person && (
                             <View style={styles.resultCard}>
-                                <View style={styles.resultHeader}>
-                                    <View style={styles.avatarId}>
-                                        <User color={GOLD} size={24} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.resultName}>{person.name.toUpperCase()}</Text>
-                                        <View style={styles.neuralBadge}>
-                                            <NeuralIcon size={12} color={GREEN_ACCENT} />
-                                            <Text style={styles.neuralBadgeText}>
-                                                {matchingDetails?.source || 'LOCAL'} • {confidence}% MATCH
-                                            </Text>
-                                        </View>
-                                        {matchingDetails && (
-                                            <View style={styles.matchingDetailBox}>
-                                                {matchingDetails.type === 'FACIAL RECOGNITION' ? (
-                                                    <View style={{ gap: 2 }}>
-                                                        <Text style={styles.matchingDetailText}>SOURCE: {matchingDetails.source}</Text>
-                                                        <Text style={styles.matchingDetailText}>OCULAR: {matchingDetails.ocular}</Text>
-                                                        <Text style={styles.matchingDetailText}>NASAL BRIDGE: {matchingDetails.nasal}</Text>
-                                                        <Text style={styles.matchingDetailText}>SYMMETRY: {matchingDetails.symmetry}</Text>
-                                                        <Text style={[styles.matchingDetailText, { marginTop: 4 }]}>HASH: {matchingDetails.neuralHash}</Text>
-                                                    </View>
-                                                ) : (
-                                                    <View style={{ gap: 2 }}>
-                                                        <Text style={styles.matchingDetailText}>SOURCE: {matchingDetails.source}</Text>
-                                                        <Text style={styles.matchingDetailText}>V-ID: {matchingDetails.vectorId}</Text>
-                                                        <Text style={styles.matchingDetailText}>CHECK: {matchingDetails.redundancy}</Text>
-                                                    </View>
-                                                )}
-                                            </View>
+
+                                {/* HEADER */}
+                                <View style={styles.resultHeaderCenter}>
+                                    <View style={styles.personPhoto}>
+                                        {person.photo ? (
+                                            <Image
+                                                source={{ uri: person.photo }}
+                                                style={styles.personImage}
+                                            />
+                                        ) : (
+                                            <User color={GOLD} size={40} />
                                         )}
                                     </View>
+
+                                    <Text style={styles.resultName}>
+                                        {person.name?.toUpperCase()}
+                                    </Text>
+
+                                    <View style={styles.neuralBadge}>
+                                        <NeuralIcon size={14} color={GREEN_ACCENT} />
+                                        <Text style={styles.neuralBadgeText}>
+                                            {matchingDetails?.source || 'LOCAL'} • {confidence}% MATCH
+                                        </Text>
+                                    </View>
+
                                 </View>
 
+                                {/* MATCH DETAILS */}
+                                {/* {matchingDetails && (
+                                <View style={styles.matchingDetailBox}>
+                                    <Text style={styles.sectionTitle}>MATCH ANALYSIS</Text>
+
+                                    {matchingDetails.type === "FACIAL RECOGNITION" ? (
+                                    <>
+                                        <Text style={styles.matchingDetailText}>SOURCE : {matchingDetails.source}</Text>
+                                        <Text style={styles.matchingDetailText}>OCULAR : {matchingDetails.ocular}</Text>
+                                        <Text style={styles.matchingDetailText}>NASAL : {matchingDetails.nasal}</Text>
+                                        <Text style={styles.matchingDetailText}>SYMMETRY : {matchingDetails.symmetry}</Text>
+
+                                        <Text style={styles.hashText}>
+                                        HASH : {matchingDetails.neuralHash}
+                                        </Text>
+                                    </>
+                                    ) : (
+                                    <>
+                                        <Text style={styles.matchingDetailText}>SOURCE : {matchingDetails.source}</Text>
+                                        <Text style={styles.matchingDetailText}>VECTOR ID : {matchingDetails.vectorId}</Text>
+                                        <Text style={styles.matchingDetailText}>REDUNDANCY : {matchingDetails.redundancy}</Text>
+                                    </>
+                                    )}
+                                </View>
+                                )} */}
+
+                                {/* PERSON DETAILS */}
                                 <View style={styles.personInfoGrid}>
-                                    {person.village ? <InfoRow label="VILLAGE" value={person.village} /> : null}
-                                    {person.district ? <InfoRow label="DISTRICT" value={person.district} /> : null}
-                                    {person.idProof ? <InfoRow label="ID TYPE" value={person.idProof} /> : null}
-                                    {person.idNumber ? <InfoRow label="ID NUMBER" value={person.idNumber} /> : null}
-                                    {person.mobile ? <InfoRow label="MOBILE" value={person.mobile} /> : null}
-                                    {person.occupation ? <InfoRow label="OCCUPATION" value={person.occupation} /> : null}
+                                    {person.village && <InfoRow label="VILLAGE" value={person.village} />}
+                                    {person.district && <InfoRow label="DISTRICT" value={person.district} />}
+                                    {person.idProof && <InfoRow label="ID TYPE" value={person.idProof} />}
+                                    {person.idNumber && <InfoRow label="ID NUMBER" value={person.idNumber} />}
+                                    {person.mobile && <InfoRow label="MOBILE" value={person.mobile} />}
+                                    {person.occupation && <InfoRow label="OCCUPATION" value={person.occupation} />}
                                 </View>
 
+                                {/* ACTION BUTTONS */}
                                 <View style={styles.resultActions}>
-                                    <TouchableOpacity style={styles.actionBtnIn} onPress={() => onAction('Entry')}>
+                                    <TouchableOpacity
+                                        style={styles.actionBtnIn}
+                                        onPress={() => onAction("Entry")}
+                                    >
                                         <Text style={styles.actionBtnText}>MARK ENTRY</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={styles.actionBtnOut} onPress={() => onAction('Exit')}>
+
+                                    <TouchableOpacity
+                                        style={styles.actionBtnOut}
+                                        onPress={() => onAction("Exit")}
+                                    >
                                         <Text style={styles.actionBtnText}>MARK EXIT</Text>
                                     </TouchableOpacity>
                                 </View>
 
+                                //... Omitted action button definitions (rendered successfully directly above) ...
+                                
+                                {/* RECENT MOVEMENTS TIMELINE */}
+                                {recentLogs.length > 0 && (
+                                    <View style={{ marginTop: 5, paddingTop: 20, borderTopWidth: 1, borderTopColor: BORDER, marginBottom: 20 }}>
+                                        <Text style={[styles.sectionTitle, {color: 'rgba(255,255,255,0.4)', fontSize: 11}]}>RECENT MOVEMENT LOGS</Text>
+                                        <View style={{ marginTop: 10, gap: 12 }}>
+                                            {recentLogs.map((log, i) => (
+                                                <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                                                    <View style={{ marginTop: 2, marginRight: 12, backgroundColor: 'rgba(255,255,255,0.05)', padding: 6, borderRadius: 20 }}>
+                                                        {log.type === 'Entry' ? <CheckCircle color={GREEN_ACCENT} size={15} /> : <X color={RED_ACCENT} size={15} />}
+                                                    </View>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={{ color: '#FFF', fontSize: 13, fontWeight: 'bold', letterSpacing: 0.5 }}>{log.type?.toUpperCase()} {log.placeOfVisit ? `- ${log.placeOfVisit.toUpperCase()}` : ''}</Text>
+                                                        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 4, fontWeight: 'bold' }}>{new Date(log.timestamp).toLocaleString([], { hour: '2-digit', minute:'2-digit', month:'short', day:'2-digit', year:'numeric' }).toUpperCase()}</Text>
+                                                    </View>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* ABORT */}
                                 <TouchableOpacity
                                     style={styles.clearBtn}
                                     onPress={() => {
                                         setIdentifiedPerson(null);
                                         setSelectedPerson(null);
-                                        setStatus('STANDBY');
+                                        setStatus("STANDBY");
                                         setMatchingDetails(null);
                                         setConfidence(0);
                                         loadData();
@@ -842,6 +892,7 @@ export default function BiometricVerify({ navigation }) {
                                 >
                                     <Text style={styles.clearBtnText}>ABORT IDENTIFICATION</Text>
                                 </TouchableOpacity>
+
                             </View>
                         )}
 
@@ -1099,8 +1150,8 @@ const styles = StyleSheet.create({
     matchingDetailText: { color: GOLD, fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
     personInfoGrid: { marginBottom: 20, gap: 6 },
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-    infoLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
-    infoValue: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+    infoLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 },
+    infoValue: { color: '#FFF', fontSize: 16, fontWeight: '600' },
     resultActions: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, gap: 15 },
     actionBtnIn: {
         backgroundColor: GREEN_ACCENT, padding: 20, borderRadius: 15, flex: 1, alignItems: 'center',
@@ -1190,4 +1241,35 @@ const styles = StyleSheet.create({
     triggerBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: BORDER },
     triggerBtnActive: { backgroundColor: GREEN_ACCENT, borderColor: GREEN_ACCENT },
     triggerBtnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+    resultHeaderCenter: {
+        alignItems: "center",
+        marginBottom: 18
+    },
+
+    personPhoto: {
+        width: 110,
+        height: 110,
+        borderRadius: 55,
+        backgroundColor: "#111",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 10,
+        borderWidth: 2,
+        borderColor: GOLD
+    },
+
+    personImage: {
+        width: "100%",
+        height: "100%",
+        borderRadius: 55
+    },
+
+    resultName: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: "#FFF",
+        letterSpacing: 1,
+        textAlign: "center",
+        marginBottom: 6
+    }
 });

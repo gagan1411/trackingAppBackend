@@ -75,10 +75,25 @@ router.post('/register', auth, async (req, res) => {
     }
 });
 
-// Search civilian by ID Number (for remote identification)
-router.get('/search/:idNumber', auth, async (req, res) => {
+// Search civilian by any ID (for remote identification)
+router.get('/search/:id', auth, async (req, res) => {
     try {
-        const civilian = await Civilian.findOne({ idNumber: req.params.idNumber });
+        const queryId = req.params.id;
+        const orConditions = [
+            { idNumber: queryId },
+            { idProof: queryId },
+            { syncId: queryId }
+        ];
+
+        // If Compass imported the 12-digit Aadhar as an actual NumberLong instead of a String, we must also query for the exact Number!
+        if (!isNaN(queryId)) {
+            const numId = Number(queryId);
+            orConditions.push({ idNumber: numId });
+            orConditions.push({ syncId: numId });
+        }
+
+        const civilian = await Civilian.findOne({ $or: orConditions });
+        
         if (!civilian) return res.status(404).json({ msg: 'Not found' });
         res.json(civilian);
     } catch (err) {

@@ -4,7 +4,7 @@ import {
     TouchableOpacity, StatusBar as RNStatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getLocalMovements, getCivilianMovements } from '../database/db';
+import { getLocalMovements, getEntryLogs } from '../database/db';
 import {
     CheckCircle, Clock, Truck, User, ArrowLeft,
     ArrowRightLeft, FileText, X, Navigation
@@ -21,7 +21,7 @@ export default function MovementList({ navigation }) {
 
     const loadMovements = async () => {
         const vehicleData = await getLocalMovements();
-        const civilianData = await getCivilianMovements();
+        const civilianData = await getEntryLogs();
 
         const combined = [
             ...vehicleData.map(v => ({ ...v, logType: 'vehicle', displayDate: v.date })),
@@ -76,11 +76,11 @@ export default function MovementList({ navigation }) {
                 ) : (
                     <View style={styles.civRow}>
                         <View style={styles.typeBadge}>
-                            <Text style={styles.typeTag}>{item.type.toUpperCase()}</Text>
+                            <Text style={styles.typeTag}>{(item.type || 'UNKNOWN').toUpperCase()}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                             <Navigation size={10} color={GOLD} />
-                            <Text style={styles.villageText}>{item.village.toUpperCase()}</Text>
+                            <Text style={styles.villageText}>{(item.village || 'UNKNOWN').toUpperCase()}</Text>
                         </View>
                     </View>
                 )}

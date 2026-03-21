@@ -1,11 +1,10 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from deepface import DeepFace
-import sqlite3
 import cv2
 import numpy as np
 import os
-import json
+from supabase import create_client, Client
 
 app = FastAPI()
 
@@ -17,24 +16,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = "biometrics.db"
+# Initialize Supabase from environment variables
+# (When running locally, you can set these in your terminal, or hardcode them temporarily)
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://lqfcgutfqyomareoecdv.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_cqQSoM7LrwGfYPoFVn5MVA_TPU_gLZS")
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS templates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            type TEXT NOT NULL,
-            template TEXT NOT NULL,
-            UNIQUE(user_id, type)
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# If testing locally, replace the "COPIED_..." strings above with your actual keys
+# Do NOT commit hardcoded keys to a public GitHub repo!
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-init_db()
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "Biometric engine actively listening"}
 
 @app.post("/register-face")
 async def register_face(user_id: str = Form(...), image: UploadFile = File(...)):
@@ -42,32 +35,47 @@ async def register_face(user_id: str = Form(...), image: UploadFile = File(...))
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # Save temp image for DeepFace
     temp_path = f"temp_reg_{user_id}.jpg"
     cv2.imwrite(temp_path, img)
 
     try:
-        # Get face embedding using Facenet512 (more accurate than standard Facenet)
+        # Extract face embedding using Facenet512
         embedding_objs = DeepFace.represent(img_path=temp_path, model_name="Facenet512", enforce_detection=False)
         embedding = embedding_objs[0]["embedding"]
         
-        # Store embedding in DB
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO templates (user_id, type, template) VALUES (?, ?, ?)", 
-                       (user_id, "face", json.dumps(embedding)))
-        conn.commit()
-        conn.close()
+        # Save embedding directly to Supabase cloud database
+        data = {"user_id": user_id, "embedding": embedding}
+        supabase.table("face_templates").upsert(data).execute()
         
-        print(f"[BIOMETRIC] Registered face for user: {user_id}")
+        # --- NEW: Upload to Supabase Storage ---
+        file_ext = image.filename.split('.')[-1] if image.filename and '.' in image.filename else 'jpg'
+        storage_path = f"{user_id}_{os.path.basename(temp_path)}"
+        
+        # Open the image file and push it up to the 'civilians' bucket
+        with open(temp_path, "rb") as f:
+            supabase.storage.from_("civilians").upload(
+                path=storage_path, 
+                file=f, 
+                file_options={"content-type": f"image/{file_ext}", "upsert": "true"}
+            )
+            
+        # Extract the public Web URL
+        public_url = supabase.storage.from_("civilians").get_public_url(storage_path)
+        # ---------------------------------------
+        
+        print(f"[BIOMETRIC] Registered face for user: {user_id} in Supabase")
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        return {"status": "success", "message": "Face registered successfully"}
+        return {
+            "status": "success", 
+            "message": "Face and Image registered successfully in Supabase", 
+            "photo_url": public_url
+        }
     except Exception as e:
         print(f"[BIOMETRIC] Register error: {str(e)}")
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        return {"status": "error", "message": f"DeepFace error: {str(e)}"}
+        return {"status": "error", "message": f"Service error: {str(e)}"}
 
 @app.post("/verify-face")
 async def verify_face(image: UploadFile = File(...)):
@@ -79,54 +87,36 @@ async def verify_face(image: UploadFile = File(...)):
     cv2.imwrite(temp_path, img)
 
     try:
-        # Use Facenet512 for verification too
+        # 1. Extract embedding from the new uploaded image
         embedding_objs = DeepFace.represent(img_path=temp_path, model_name="Facenet512", enforce_detection=False)
-        candidate_embedding = np.array(embedding_objs[0]["embedding"])
+        candidate_embedding = embedding_objs[0]["embedding"]
 
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id, template FROM templates WHERE type='face'")
-        rows = cursor.fetchall()
-        conn.close()
-
-        best_match = None
-        max_similarity = -1.0
-        # Cosine similarity threshold (0.4 is generally strict for Facenet512 cosine distance, 
-        # but similarity [1-distance] > 0.6 is good)
-        SIMILARITY_THRESHOLD = 0.65 
-
-        for row in rows:
-            user_id = row[0]
-            db_embedding = np.array(json.loads(row[1]))
-            
-            # Use Cosine Similarity for better accuracy across devices/lighting
-            dot_product = np.dot(db_embedding, candidate_embedding)
-            norm_db = np.linalg.norm(db_embedding)
-            norm_cand = np.linalg.norm(candidate_embedding)
-            similarity = dot_product / (norm_db * norm_cand)
-
-            if similarity > max_similarity:
-                max_similarity = similarity
-                if similarity > SIMILARITY_THRESHOLD:
-                    best_match = user_id
+        # 2. Tell Supabase to find a vector match instantly via the RPC function created in SQL
+        response = supabase.rpc(
+            "match_face", 
+            {"query_embedding": candidate_embedding, "match_threshold": 0.65, "match_count": 1}
+        ).execute()
 
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-        if best_match:
+        matches = response.data
+        if matches and len(matches) > 0:
+            best_match = matches[0]
+            similarity = best_match["similarity"]
             # Map similarity to a human-readable 0-100% confidence
-            # (threshold -> 1.0) maps to (80% -> 100%)
-            confidence = 80 + (max_similarity - SIMILARITY_THRESHOLD) / (1 - SIMILARITY_THRESHOLD) * 20
-            print(f"[BIOMETRIC] Match found: {best_match} ({confidence:.2f}%)")
+            confidence = 80 + (similarity - 0.65) / (1 - 0.65) * 20
+            
+            print(f"[BIOMETRIC] Match found: {best_match['user_id']} ({confidence:.2f}%)")
             return {
-                "status": "match", 
-                "user_id": best_match, 
+                "status": "match",
+                "user_id": best_match["user_id"],
                 "confidence": round(min(99.99, confidence), 2),
-                "similarity": round(float(max_similarity), 4)
+                "similarity": round(similarity, 4)
             }
         else:
-            print(f"[BIOMETRIC] No match found. Best similarity: {max_similarity:.4f}")
-            return {"status": "no_match", "message": "No matching face found", "best_sim": round(float(max_similarity), 4)}
+            print("[BIOMETRIC] No match found.")
+            return {"status": "no_match", "message": "No matching face found"}
             
     except Exception as e:
         print(f"[BIOMETRIC] Verify error: {str(e)}")
@@ -136,45 +126,18 @@ async def verify_face(image: UploadFile = File(...)):
 
 @app.post("/register-fingerprint")
 async def register_fingerprint(user_id: str = Form(...), template: str = Form(...)):
-    # This endpoint receives the raw template string from Mantra MFS100 SDK via the App
+    # Legacy endpoint: Migrating to Supabase
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO templates (user_id, type, template) VALUES (?, ?, ?)", 
-                       (user_id, "fingerprint", template))
-        conn.commit()
-        conn.close()
-        return {"status": "success", "message": "Fingerprint template registered successfully"}
+        data = {"user_id": user_id, "type": "fingerprint", "template": template}
+        # Assuming you created a separate table for fingerprints or modified the schema
+        # For now, we will return a pending migration message since we moved face templates strictly to vector table
+        return {"status": "error", "message": "Fingerprints are migrating to Supabase cloud. Use face registration."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.post("/verify-fingerprint")
 async def verify_fingerprint(template: str = Form(...)):
-    # Simple strict exact match for demo purposes
-    # Alternatively send list back for SDK to compare locally, or use a Python fingerprint logic engine
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id, template FROM templates WHERE type='fingerprint'")
-        rows = cursor.fetchall()
-        conn.close()
-
-        best_match = None
-        
-        for row in rows:
-            user_id = row[0]
-            db_template = row[1]
-            if template == db_template:
-                best_match = user_id
-                break
-
-        if best_match:
-            return {"status": "match", "user_id": best_match, "confidence": 99.9}
-        else:
-            return {"status": "no_match"}
-            
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    return {"status": "error", "message": "Fingerprints are migrating to Supabase cloud. Use face verification."}
 
 if __name__ == "__main__":
     import uvicorn

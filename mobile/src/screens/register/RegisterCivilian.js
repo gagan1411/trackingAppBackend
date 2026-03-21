@@ -60,6 +60,46 @@ const DISTRICTS_BY_STATE = {
     'Lakshadweep': ['Lakshadweep'],
 };
 
+const TEHSILS_BY_DISTRICT_JK = {
+    'Anantnag': ['Anantnag', 'Bijbehara', 'Dooru', 'Kokernag', 'Pahalgam', 'Shangus'],
+    'Bandipora': ['Bandipora', 'Gurez', 'Sumbal', 'Tulail'],
+    'Baramulla': ['Baramulla', 'Boniyar', 'Kreeri', 'Pattan', 'Rafiabad', 'Rouwara', 'Sopore', 'Tangmarg', 'Uri'],
+    'Budgam': ['Beerwah', 'Budgam', 'Chadoora', 'Khansahib', 'Narbal'],
+    'Doda': ['Bhaderwah', 'Doda', 'Gandoh', 'Thathri'],
+    'Ganderbal': ['Ganderbal', 'Kangan', 'Tullamulla'],
+    'Jammu': ['Jammu', 'Akhnoor', 'Ranbir Singh Pora', 'Bishnah'],
+    'Kathua': ['Basholi', 'Bhoond', 'Billawar', 'Diglipur', 'Hiranagar', 'Kathua', 'Lakhanpur'],
+    'Kishtwar': ['Atholi', 'Chhatroo', 'Kishtwar', 'Sarhati', 'Warwan'],
+    'Kulgam': ['Kulgam', 'D.H.Pora', 'Yaripora'],
+    'Kupwara': ['Drugmula', 'Handwara', 'Kupwara', 'Lolab', 'Sogam', 'Trehgam'],
+    'Poonch': ['Haveli', 'Mendhar', 'Poonch'],
+    'Pulwama': ['Pampore', 'Pulwama', 'Qazigund', 'Rajpora', 'Tral'],
+    'Rajouri': ['Darhal', 'Kalakote', 'Manjakote', 'Nowshera', 'Rajouri', 'Sunderbani', 'Thanamandi'],
+    'Ramban': ['Banhal', 'Batote', 'Gool', 'Ramban', 'Ramsoo'],
+    'Reasi': ['Mahore', 'Pouni', 'Reasi'],
+    'Samba': ['Samba', 'Vijaypur'],
+    'Shopian': ['Shopian', 'Keller'],
+    'Srinagar': ['Srinagar'],
+    'Udhampur': ['Chenani', 'Gulabgarh', 'Katra', 'Majalta', 'Ramnagar', 'Udhampur'],
+};
+
+const occupationOptions = [
+    { label: 'Farmer', value: 'Farmer' },
+    { label: 'Shopkeeper', value: 'Shopkeeper' },
+    { label: 'Daily Wage Laborer', value: 'Daily Wage Laborer' },
+    { label: 'Government Employee', value: 'Government Employee' },
+    { label: 'Private Employee', value: 'Private Employee' },
+    { label: 'Business Owner', value: 'Business Owner' },
+    { label: 'Student', value: 'Student' },
+    { label: 'Housewife', value: 'Housewife' },
+    { label: 'Retired', value: 'Retired' },
+    { label: 'Unemployed', value: 'Unemployed' },
+    { label: 'Other', value: 'Other' }
+];
+
+
+
+
 // Normalize state name from geocoding response to match our state list
 const normalizeState = (raw) => {
     if (!raw) return null;
@@ -100,7 +140,7 @@ export default function RegisterCivilian({ navigation }) {
     const [dob, setDob] = useState('');
     const [dobDate, setDobDate] = useState(new Date(2000, 0, 1));
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [occupation, setOccupation] = useState('');
+    // const [occupation, setOccupation] = useState(null);
 
     const onDateChange = (event, selectedDate) => {
         setShowDatePicker(false);
@@ -130,8 +170,7 @@ export default function RegisterCivilian({ navigation }) {
     const [religion, setReligion] = useState(null);
     const [openReligion, setOpenReligion] = useState(false);
     const [religionOptions] = useState([
-        { label: 'Sunni Muslim', value: 'Sunni Muslim' },
-        { label: 'Shia Muslim', value: 'Shia Muslim' },
+        { label: 'Muslim', value: 'Muslim' },
         { label: 'Hindu', value: 'Hindu' },
         { label: 'Sikh', value: 'Sikh' },
         { label: 'Christian', value: 'Christian' },
@@ -239,6 +278,8 @@ export default function RegisterCivilian({ navigation }) {
     const [tehsil, setTehsil] = useState('');
     const [village, setVillage] = useState('');
     const [houseDetails, setHouseDetails] = useState('');
+    const [occupation, setOccupation] = useState(null);  // Change from string to null
+    
 
     // Update district options when state changes
     useEffect(() => {
@@ -350,49 +391,60 @@ export default function RegisterCivilian({ navigation }) {
     // We store a unique token locally; the device sensor confirms the scan.
     const handleBiometricEnroll = async () => {
         const { LocalAuthentication } = require('expo-local-authentication');
+
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-        if (!hasHardware || !isEnrolled) {
-            Alert.alert(
-                'No Fingerprint Sensor',
-                'Your device does not have a fingerprint sensor or none are enrolled in Settings.'
-            );
-            return;
+        const startEnrollment = async (mode = 'standard') => {
+            setSaving(true);
+            try {
+                let success = false;
+                let fingerprintId = '';
+
+                if (mode === 'simulation') {
+                    await new Promise(r => setTimeout(r, 1500));
+                    success = true;
+                    fingerprintId = 'SIM_' + Date.now();
+                } else {
+                    const result = await LocalAuthentication.authenticateAsync({
+                        promptMessage: 'Scan civilian fingerprint for enrollment',
+                        cancelLabel: 'Cancel',
+                        disableDeviceFallback: true,
+                    });
+                    success = result.success;
+                    fingerprintId = 'HW_' + Date.now();
+                }
+
+                if (success) {
+                    const token = 'FP_LINKED_' + fingerprintId + '_' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                    setFingerprintTemplate(token);
+                    setFingerprintImage('enrolled');
+
+                    const title = mode === 'simulation' ? '✅ VIRTUAL LINKED' : '✅ ENROLLED';
+                    const msg = mode === 'simulation'
+                        ? 'Mock Fingerprint ID generated for testing.'
+                        : 'Fingerprint captured and stored locally.';
+
+                    Alert.alert(title, msg);
+                }
+            } catch (e) {
+                Alert.alert('Scanner Error', e.message);
+            } finally {
+                setSaving(false);
+            }
+        };
+
+        const options = [];
+        if (hasHardware && isEnrolled) {
+            options.push({ text: 'PHONE SENSOR', onPress: () => startEnrollment('standard') });
         }
+        options.push({ text: 'VIRTUAL (SIMULATE)', onPress: () => startEnrollment('simulation') });
+        options.push({ text: 'Cancel', style: 'cancel' });
 
         Alert.alert(
-            'Fingerprint Enrollment',
-            'Ask the civilian to place their finger on the scanner. The device will capture the fingerprint.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'START SCAN',
-                    onPress: async () => {
-                        setSaving(true);
-                        try {
-                            const result = await LocalAuthentication.authenticateAsync({
-                                promptMessage: 'Scan civilian fingerprint for enrollment',
-                                cancelLabel: 'Cancel',
-                                disableDeviceFallback: true,
-                            });
-                            if (result.success) {
-                                // Generate a unique template token for this enrollment
-                                const token = 'FP_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9).toUpperCase();
-                                setFingerprintTemplate(token);
-                                setFingerprintImage('enrolled');
-                                Alert.alert('✅ Enrolled', 'Fingerprint captured and stored locally.');
-                            } else {
-                                Alert.alert('Scan Failed', 'Fingerprint not recognized. Please try again.');
-                            }
-                        } catch (e) {
-                            Alert.alert('Error', e.message);
-                        } finally {
-                            setSaving(false);
-                        }
-                    }
-                }
-            ]
+            'Select Biometric Source',
+            'How would you like to capture the fingerprint?',
+            options
         );
     };
 
@@ -496,28 +548,37 @@ export default function RegisterCivilian({ navigation }) {
             }
 
             // ── 4. Log the entry automatically ───────────────────────────────
-            await saveEntryLog({
-                civilianId: Date.now(),
-                name: name.trim(),
-                village,
-                type: 'Entry',
-                category,
-                vehicleDetails: JSON.stringify(vehicles[0])
-            });
+            // await saveEntryLog({
+            //     civilianId: Date.now(),
+            //     name: name.trim(),
+            //     village,
+            //     type: 'Entry',
+            //     category,
+            //     vehicleDetails: JSON.stringify(vehicles[0])
+            // });
 
-            // ── 5. Background: try LAN server upload (non-blocking) ──────────
+            // ── 5. Attempt Cloud Image Upload via Biometric Service ──────────
+            let finalPhotoForCloud = capturedPhoto; // Default to local path if offline
+
             if (capturedPhoto) {
-                getLocalBiometricUrl().then(localUrl => {
+                try {
+                    const localUrl = await getLocalBiometricUrl();
                     if (localUrl) {
-                        registerFaceLocal(localUrl, userId, capturedPhoto)
-                            .then(r => console.log('LAN face register:', r.message))
-                            .catch(e => console.log('LAN face register skip:', e.message));
+                        const r = await registerFaceLocal(localUrl, userId, capturedPhoto);
+                        console.log('Biometric and Storage register success:', r.message);
+                        if (r.photo_url) {
+                            finalPhotoForCloud = r.photo_url; // Use the public web URL for MongoDB!
+                        }
                     }
-                }).catch(() => { });
+                } catch (e) {
+                    console.log('Biometric upload skip/fail (offline?):', e.message);
+                }
             }
 
-            // ── 6. Background: try central server sync (non-blocking) ────────
-            api.post('/civilians/register', registrationData)
+            // ── 6. Background: central server sync (with updated Cloud URL) ────────
+            const cloudRegistrationData = { ...registrationData, photo: finalPhotoForCloud };
+
+            api.post('/civilians/register', cloudRegistrationData)
                 .catch(() => console.warn('Central registration failed, saved locally only.'));
 
             Alert.alert('✅ Registered', `${name.trim()} has been registered locally. Biometrics saved to device database.`, [
@@ -682,7 +743,26 @@ export default function RegisterCivilian({ navigation }) {
                             </View>
 
                             <FLabel required>OCCUPATION</FLabel>
-                            <FInput icon={<Shield />} value={occupation} onChange={setOccupation} placeholder="e.g. Resident / Farmer" />
+                            <PrimeDropdown
+                                value={occupation}
+                                items={occupationOptions}
+                                setValue={setOccupation}
+                                placeholder="Select Occupation"
+                                style={styles.dropdownSm}
+                                textStyle={styles.dropdownText}
+                            />
+                            {occupation === 'other' && (
+                                <>
+                                    <FLabel>SPECIFY OCCUPATION</FLabel>
+                                    <TextInput
+                                        value={otherOccupation}
+                                        onChangeText={setOtherOccupation}
+                                        placeholder="Enter occupation"
+                                        style={styles.input}
+                                    />
+                                </>
+                            )}
+                            {/* <FInput icon={<Shield />} value={occupation} onChange={setOccupation} placeholder="e.g. Resident / Farmer" /> */}
 
                             <FLabel>OTHER PHYSIOLOGICAL CHARACTERISTICS</FLabel>
                             <FInput value={physiologicalCharacteristics} onChange={setPhysiologicalCharacteristics} placeholder="Marks, Height, etc." />
@@ -707,8 +787,8 @@ export default function RegisterCivilian({ navigation }) {
                             <FLabel style={{ marginTop: 14 }} required>ID NUMBER</FLabel>
                             <FInput icon={<FileText />} value={idNumber} onChange={setIdNumber} placeholder={getIDPlaceholder()} />
 
-                            <FLabel style={{ marginTop: 14 }}>DEFENCE CARD NO</FLabel>
-                            <FInput icon={<FileText />} value={fenceCardNo} onChange={setFenceCardNo} placeholder="Enter defence card no" />
+                            <FLabel style={{ marginTop: 14 }}>FENCE CARD NO</FLabel>
+                            <FInput icon={<FileText />} value={fenceCardNo} onChange={setFenceCardNo} placeholder="Enter fence card no" />
                         </View>
 
                         {/* ── VEHICLES ── */}
@@ -761,7 +841,19 @@ export default function RegisterCivilian({ navigation }) {
                             />
 
                             <FLabel required>TEHSIL</FLabel>
-                            <FInput icon={<MapPin />} value={tehsil} onChange={setTehsil} placeholder="Tehsil" />
+                                {state === 'Jammu & Kashmir' ? (
+                                    <PrimeDropdown
+                                        value={tehsil}
+                                        items={TEHSILS_BY_DISTRICT_JK[district] ? TEHSILS_BY_DISTRICT_JK[district].map(t => ({ label: t, value: t })) : []}
+                                        setValue={setTehsil}
+                                        placeholder={district ? `Select Tehsil in ${district}` : 'Select District first'}
+                                        style={styles.dropdownSm}
+                                        textStyle={styles.dropdownText}
+                                    />
+                                    ) : (
+                                    <FInput iconMapPin value={tehsil} onChange={setTehsil} placeholder="Tehsil" />
+                                )}
+                            {/* <FInput icon={<MapPin />} value={tehsil} onChange={setTehsil} placeholder="Tehsil" /> */}
 
                             <FLabel required>VILLAGE</FLabel>
                             <FInput icon={<MapPin />} value={village} onChange={setVillage} placeholder="Enter village name" />
