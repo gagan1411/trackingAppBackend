@@ -548,28 +548,37 @@ export default function RegisterCivilian({ navigation }) {
             }
 
             // ── 4. Log the entry automatically ───────────────────────────────
-            await saveEntryLog({
-                civilianId: Date.now(),
-                name: name.trim(),
-                village,
-                type: 'Entry',
-                category,
-                vehicleDetails: JSON.stringify(vehicles[0])
-            });
+            // await saveEntryLog({
+            //     civilianId: Date.now(),
+            //     name: name.trim(),
+            //     village,
+            //     type: 'Entry',
+            //     category,
+            //     vehicleDetails: JSON.stringify(vehicles[0])
+            // });
 
-            // ── 5. Background: try LAN server upload (non-blocking) ──────────
+            // ── 5. Attempt Cloud Image Upload via Biometric Service ──────────
+            let finalPhotoForCloud = capturedPhoto; // Default to local path if offline
+
             if (capturedPhoto) {
-                getLocalBiometricUrl().then(localUrl => {
+                try {
+                    const localUrl = await getLocalBiometricUrl();
                     if (localUrl) {
-                        registerFaceLocal(localUrl, userId, capturedPhoto)
-                            .then(r => console.log('LAN face register:', r.message))
-                            .catch(e => console.log('LAN face register skip:', e.message));
+                        const r = await registerFaceLocal(localUrl, userId, capturedPhoto);
+                        console.log('Biometric and Storage register success:', r.message);
+                        if (r.photo_url) {
+                            finalPhotoForCloud = r.photo_url; // Use the public web URL for MongoDB!
+                        }
                     }
-                }).catch(() => { });
+                } catch (e) {
+                    console.log('Biometric upload skip/fail (offline?):', e.message);
+                }
             }
 
-            // ── 6. Background: try central server sync (non-blocking) ────────
-            api.post('/civilians/register', registrationData)
+            // ── 6. Background: central server sync (with updated Cloud URL) ────────
+            const cloudRegistrationData = { ...registrationData, photo: finalPhotoForCloud };
+
+            api.post('/civilians/register', cloudRegistrationData)
                 .catch(() => console.warn('Central registration failed, saved locally only.'));
 
             Alert.alert('✅ Registered', `${name.trim()} has been registered locally. Biometrics saved to device database.`, [
@@ -742,6 +751,17 @@ export default function RegisterCivilian({ navigation }) {
                                 style={styles.dropdownSm}
                                 textStyle={styles.dropdownText}
                             />
+                            {occupation === 'other' && (
+                                <>
+                                    <FLabel>SPECIFY OCCUPATION</FLabel>
+                                    <TextInput
+                                        value={otherOccupation}
+                                        onChangeText={setOtherOccupation}
+                                        placeholder="Enter occupation"
+                                        style={styles.input}
+                                    />
+                                </>
+                            )}
                             {/* <FInput icon={<Shield />} value={occupation} onChange={setOccupation} placeholder="e.g. Resident / Farmer" /> */}
 
                             <FLabel>OTHER PHYSIOLOGICAL CHARACTERISTICS</FLabel>

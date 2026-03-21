@@ -28,8 +28,8 @@ export default function OfflineMap({ navigation }) {
     const [mapType, setMapType] = useState('satellite');
 
     const [downloadedMaps, setDownloadedMaps] = useState([
-        { id: 1, name: 'KUPWARA SECTOR A', size: '12.4 MB', date: '2024-02-20' },
-        { id: 2, name: 'HANDWARA MAIN', size: '8.1 MB', date: '2024-02-18' }
+        // { id: 1, name: 'KUPWARA SECTOR A', size: '12.4 MB', date: '2024-02-20' },
+        // { id: 2, name: 'HANDWARA MAIN', size: '8.1 MB', date: '2024-02-18' }
     ]);
 
     // Patrol / checkpoint markers across the region

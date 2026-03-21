@@ -9,6 +9,7 @@ import {
     Home, Users, MapPin, Plus, ArrowLeft,
     Shield, X, ChevronRight, Clipboard
 } from 'lucide-react-native';
+import  galutaHouses from '../../../assets/Galuta/GalutaLandmarks.json';
 
 const GOLD = '#C5A059';
 const DARK = '#0B0F14';
@@ -16,16 +17,32 @@ const CARD_BG = 'rgba(0,0,0,0.85)';
 const BORDER = 'rgba(255,255,255,0.15)';
 const RED_ACCENT = '#FF4D4D';
 
+function extractPersonName(html) {
+    if (!html) return null;
+    const match = html.match(/<i>(.*?)<\/i>/);
+    return match ? match[1].trim() : null;
+}
+
 export default function CensusMode({ navigation }) {
     const [records, setRecords] = useState([]);
 
     const fetchRecords = async () => {
-        const data = await getCensusRecords();
+        // const data = await getCensusRecords();
+        console.log('Galuta: ', galutaHouses);
+        const data = galutaHouses.features.map((house, index) => ({
+            id: index+1,
+            name: extractPersonName(house.properties.description),
+            houseNo: house.properties.Name,
+            houseCoords: house.geometry.coordinates,
+            // surveyDate: new Date().toISOString()
+        }));
+        console.log('Fetched Census Records:', data);
         setRecords(data);
     };
 
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
+            console.log('CensusMode focused, fetching records...');
             fetchRecords();
         });
         return unsubscribe;
@@ -39,13 +56,13 @@ export default function CensusMode({ navigation }) {
                     <Home size={18} color={GOLD} />
                 </View>
                 <View style={{ flex: 1 }}>
-                    <Text style={styles.houseLabel}>HOUSE RECORD NO. {item.houseNumber || 'N/A'}</Text>
-                    <Text style={styles.headName}>{item.headOfFamily.toUpperCase()}</Text>
+                    <Text style={styles.houseLabel}>HOUSE NO. {item.houseNo || 'N/A'}</Text>
+                    <Text style={styles.headName}>{item.name?.toUpperCase() || 'N/A'}</Text>
                 </View>
                 <ChevronRight size={18} color="rgba(255,255,255,0.2)" />
             </View>
 
-            <View style={styles.cardBody}>
+            {/* <View style={styles.cardBody}>
                 <View style={styles.detailRow}>
                     <MapPin size={12} color={GOLD} />
                     <Text style={styles.detailText}>{item.address.toUpperCase()}</Text>
@@ -58,7 +75,7 @@ export default function CensusMode({ navigation }) {
                     <Text style={styles.pillText}>{item.membersCount} FAMILY MEMBERS</Text>
                 </View>
                 <Text style={styles.dateText}>{new Date(item.surveyDate).toLocaleDateString()}</Text>
-            </View>
+            </View> */}
         </View>
     );
 
@@ -82,12 +99,12 @@ export default function CensusMode({ navigation }) {
                     {/* Stats Summary Area */}
                     <View style={styles.summaryBar}>
                         <View style={styles.statSummaryItem}>
-                            <Text style={styles.summaryValue}>{records.length}</Text>
+                            <Text style={styles.summaryValue}>37</Text>
                             <Text style={styles.summaryLabel}>TOTAL HOUSES SURVEYED</Text>
                         </View>
                         <TouchableOpacity
                             style={styles.addButton}
-                            onPress={() => navigation.navigate('AddCensusData')}
+                            onPress={() => navigation.navigate('RegisterCivilian')}
                         >
                             <Plus size={20} color="#000" />
                             <Text style={styles.addButtonText}>NEW RECORD</Text>
@@ -99,14 +116,9 @@ export default function CensusMode({ navigation }) {
                         keyExtractor={(item) => item.id.toString()}
                         renderItem={renderItem}
                         contentContainerStyle={styles.listContent}
-                        ListHeaderComponent={<Text style={styles.listLabel}>RECENT SURVEY LOGS</Text>}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Users size={48} color="rgba(255,255,255,0.1)" />
-                                <Text style={styles.emptyText}>NO CENSUS DATA LOADED</Text>
-                                <Text style={styles.emptySubText}>Initiate a new house survey to populate database.</Text>
-                            </View>
-                        }
+                        // ListHeaderComponent={<Text style={styles.listLabel}>RECENT SURVEY LOGS</Text>}
+                        // 
+                        
                     />
                 </View>
             </SafeAreaView>

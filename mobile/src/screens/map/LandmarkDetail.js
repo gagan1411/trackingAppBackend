@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    ImageBackground, Dimensions
+    ImageBackground, Dimensions, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LeafletMapView from '../../components/LeafletMapView';
@@ -9,7 +9,10 @@ import {
     ArrowLeft, MapPin, Mountain, User, Hash, Navigation,
     Shield, Clock, Eye
 } from 'lucide-react-native';
-import { galutaPers } from '../../../assets/Galuta/GALUTA_filtered_data_with_images.json';
+import galutaPers from '../../../assets/Galuta/GALUTA_filtered_data_with_images.json';
+import RNFS from 'react-native-fs';
+import { DomUtils, parseDocument } from 'htmlparser2';
+// import { imageMap } from "../../../../imagerMap.ts";
 
 const GOLD = '#C5A059';
 const DARK = '#0B0F14';
@@ -74,13 +77,29 @@ export default function LandmarkDetail({ navigation, route }) {
 
     const typeColor = getTypeColor(landmarkType);
 
-    // const persDisp = galutaPers.filter((item) => {
-    //     if (item.Name === props.Name) {
-    //         return (item
-    //         )
-    //     }
-    // })
-    console.log(galutaPers);
+    const persDisp = galutaPers.filter((item) => {
+        console.log(item['House No']?.toString().match(/\d+/)?.[0], props.Name.toString().match(/\d+/)?.[0]);
+        if (item['House No']?.toString().match(/\d+/)?.[0] === props.Name.toString().match(/\d+/)?.[0]) {
+            return (item
+            )
+        }
+    })
+
+    const document = parseDocument(props.description);
+    const images = DomUtils.findAll(
+        (elem) => elem.type === "tag" && elem.name === "img",
+        document.children
+    );
+
+    const imageSources = images.map((img) => img.attribs?.src);
+
+    const italicTag = DomUtils.findOne(
+        (elem) => elem.type === "tag" && elem.name === "i",
+        document.children
+    );
+
+    const name = italicTag ? DomUtils.textContent(italicTag) : "";
+    console.log(imageSources);
 
 
 
@@ -135,14 +154,34 @@ export default function LandmarkDetail({ navigation, route }) {
                             <View style={styles.divider} />
 
                             {/* Name */}
-                            <View style={styles.infoRow}>
+                            <View style={styles.houseCard}>
                                 <View style={styles.infoIconBox}>
                                     <Hash size={16} color={GOLD} />
                                 </View>
-                                <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>DESIGNATION</Text>
-                                    <Text style={styles.infoValue}>{(props.Name || 'N/A').toUpperCase()}</Text>
+                                <View style={styles.houseText}>
+                                    <Text style={styles.houseLabel}>HOUSE NO</Text>
+                                    <Text style={styles.houseValue}>{(props.Name || 'N/A').toUpperCase()}</Text>
                                 </View>
+                            </View>
+                            <View key='houseImage' style={styles.houseImageContainer}>
+                                {imageSources && imageSources.map((image, index) => (
+                                    <Image
+                                        key={index}
+                                        source={{
+                                            uri:
+                                                "file://" +
+                                                RNFS.DocumentDirectoryPath +
+                                                "/Galuta/" +
+                                                image,
+                                        }}
+                                        style={{
+                                            width: 200,
+                                            height: 200,
+                                            borderRadius: 8
+                                        }}
+                                        resizeMode="contain"
+                                    />
+                                ))}
                             </View>
 
                             {/* Person */}
@@ -152,11 +191,41 @@ export default function LandmarkDetail({ navigation, route }) {
                                         <User size={16} color="#4FC3F7" />
                                     </View>
                                     <View style={styles.infoContent}>
-                                        <Text style={styles.infoLabel}>OCCUPANT / CONTACT</Text>
+                                        <Text style={styles.infoLabel}>FAMILY HEAD</Text>
                                         <Text style={styles.infoValue}>{personName.toUpperCase()}</Text>
                                     </View>
                                 </View>
                             )}
+                            {persDisp && persDisp.map((item, index) => (
+                                <View key={index} style={styles.personCard}>
+                                    {/* Details on the left */}
+                                    <View style={styles.personDetails}>
+                                    {Object.entries(item).map(([key, value]) => {
+                                        if (key !== "House No" && key !== "imagePath") {
+                                        return (
+                                            <View key={key} style={styles.personRow}>
+                                            <Text style={styles.personLabel}>{key.toUpperCase()}</Text>
+                                            <Text style={styles.personValue}>{value}</Text>
+                                            </View>
+                                        );
+                                        }
+                                    })}
+                                    </View>
+
+                                    {/* Image on the right */}
+                                    {item.imagePath && (
+                                    <View style={styles.personImageWrapper}>
+                                        <Image
+                                        source={{
+                                            uri: "file://" + RNFS.DocumentDirectoryPath + "/Galuta/persImages/" + item.imagePath,
+                                        }}
+                                        style={styles.personImage}
+                                        resizeMode="cover"
+                                        />
+                                    </View>
+                                    )}
+                                </View>
+                                ))}
 
                             {/* Altitude */}
                             {/* {altitude != null && (
@@ -294,6 +363,7 @@ const styles = StyleSheet.create({
         backgroundColor: CARD_BG, borderRadius: 24,
         padding: 22, borderWidth: 1.5, borderColor: BORDER,
         elevation: 8, shadowColor: '#000',
+        
     },
     cardHeader: {
         flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14,
@@ -379,4 +449,95 @@ const styles = StyleSheet.create({
         fontSize: 13, fontWeight: 'bold', color: '#FFF', letterSpacing: 0.5,
     },
     statusDot: { width: 8, height: 8, borderRadius: 4 },
+    personImageContainer: {
+        alignItems: 'center',
+        marginTop: 10,
+        marginBottom: 10
+    },
+    personCard: {
+        flexDirection: 'row',        // horizontal layout
+        backgroundColor: CARD_BG,
+        borderRadius: 16,
+        padding: 12,
+        marginBottom: 16,
+        alignItems: 'center',        // vertically center
+        justifyContent: 'flex-start', // pack items together
+        borderWidth: 1, borderColor: BORDER,
+    },
+
+    personDetails: {
+        flexShrink: 1,               // shrink to fit content
+        paddingRight: 8,             // small space before image
+    },
+    personRow: {
+        marginBottom: 6,
+    },
+    personLabel: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.5)',
+        fontWeight: 'bold',
+    },
+    personValue: {
+        fontSize: 14,
+        color: '#FFF',
+        fontWeight: 'bold',
+    },
+
+    personImageWrapper: {
+        width: 200,
+        height: 200,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginLeft: 250,               // reduces the gap from details
+    },
+
+    personImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+    },
+    houseImageContainer: {
+        alignItems: 'center',   // center images horizontally
+        marginVertical: 12,     // spacing above/below images
+        flexDirection: 'row',   // optional if showing multiple images in a row
+        flexWrap: 'wrap',       // wrap if more than one image
+        justifyContent: 'center',
+        gap: 12,                // space between multiple images
+    },
+    houseCard: {
+        flexDirection: 'row',           // row layout: text left, image right
+        alignItems: 'center',           // vertically center content
+        justifyContent: 'space-between',// text left, image right
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        borderRadius: 24,
+        padding: 16,
+        marginVertical: 12,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.15)',
+        elevation: 6,                  // shadow for Android
+        shadowColor: '#000',           // shadow for iOS
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
+    houseText: {
+  flex: 1,                        // take remaining width
+  paddingRight: 12,               // spacing from image
+},
+houseLabel: {
+  fontSize: 10,
+  fontWeight: 'bold',
+  color: 'rgba(255,255,255,0.3)',
+  marginBottom: 2,
+},
+houseValue: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: '#FFF',
+},
+houseImage: {
+  width: 120,
+  height: 120,
+  borderRadius: 12,
+},
 });

@@ -46,8 +46,8 @@ export async function getLocalBiometricUrl() {
         }
     } catch (_) { }
 
-    // 2. Try common LAN addresses for the biometric PC
     const candidates = [
+        `http://172.20.10.7:${PORT}`, // Auto-discovered Hotspot IP
         `http://192.168.1.100:${PORT}`,
         `http://192.168.0.100:${PORT}`,
         `http://192.168.29.240:${PORT}`,

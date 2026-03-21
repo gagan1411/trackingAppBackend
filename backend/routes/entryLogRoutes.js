@@ -35,4 +35,15 @@ router.post('/sync', auth, async (req, res) => {
     }
 });
 
+router.get('/civilian/:id', auth, async (req, res) => {
+    try {
+        const logs = await EntryLog.find({ civilianId: req.params.id })
+            .sort({ timestamp: -1 })
+            .limit(10);
+        res.json(logs);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
 module.exports = router;

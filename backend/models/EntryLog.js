@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const EntryLogSchema = new mongoose.Schema({
-    civilianId: { type: Number },
+    civilianId: { type: String },
     name: { type: String },
     village: { type: String },
     type: { type: String }, // Entry / Exit
