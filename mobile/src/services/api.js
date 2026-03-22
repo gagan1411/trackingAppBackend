@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 const DEFAULT_API_URL = 'https://backend-e4a6.onrender.com/api';
+// https://backend-e4a6.onrender.com
 
 const api = axios.create({
     baseURL: DEFAULT_API_URL,
@@ -13,7 +14,7 @@ api.interceptors.request.use(async (config) => {
     // We are totally bypassing `localtunnel` AND any old `172.x` / `10.x` raw ips saved in the cache.
     // The mobile app will ONLY dynamically use the live internet matrix URL right now!
     config.baseURL = DEFAULT_API_URL;
-    
+
     // Attempt standard authentication lookup
     const token = await SecureStore.getItemAsync('token');
     if (token) {

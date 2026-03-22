@@ -10,8 +10,13 @@ const app = express();
 
 const fs = require('fs');
 app.use((req, res, next) => {
-    const log = `${new Date().toISOString()} - ${req.method} ${req.url}\n`;
-    fs.appendFileSync('requests.log', log);
+    const start = Date.now();
+
+    res.on('finish', () => {
+        const log = `${new Date().toISOString()} - ${req.method} ${req.url} - ${res.statusCode} - ${Date.now() - start}ms\n`;
+        fs.appendFile('requests.log', log, () => { });
+    });
+
     next();
 });
 
