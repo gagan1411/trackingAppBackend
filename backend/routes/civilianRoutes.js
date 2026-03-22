@@ -85,6 +85,7 @@ router.get('/search/:id', auth, async (req, res) => {
             { syncId: queryId }
         ];
 
+        console.log('Querying for civilian with ID: ', queryId);
         // If Compass imported the 12-digit Aadhar as an actual NumberLong instead of a String, we must also query for the exact Number!
         if (!isNaN(queryId)) {
             const numId = Number(queryId);
@@ -93,7 +94,7 @@ router.get('/search/:id', auth, async (req, res) => {
         }
 
         const civilian = await Civilian.findOne({ $or: orConditions });
-        
+
         if (!civilian) return res.status(404).json({ msg: 'Not found' });
         res.json(civilian);
     } catch (err) {
