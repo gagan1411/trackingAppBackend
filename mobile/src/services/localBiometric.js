@@ -40,7 +40,7 @@ export async function getLocalBiometricUrl() {
     try {
         const saved = await SecureStore.getItemAsync('local_biometric_ip');
         if (saved) {
-            const url = saved.startsWith('http') ? saved : `http://${saved}:${PORT}`;
+            const url = saved.startsWith('http') ? saved : `https://gc141199-biometricfaceengine.hf.space:${PORT}`;
             const live = await pingServer(url);
             if (live) return live;
         }

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
     View, Text, FlatList, StyleSheet, ImageBackground,
-    TouchableOpacity, StatusBar as RNStatusBar
+    TouchableOpacity, StatusBar as RNStatusBar, RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getLocalMovements, getEntryLogs } from '../database/db';
+import { getLocalMovements, getEntryLogs, syncDailyEntryLogsToLocal } from '../database/db';
+import api from '../services/api';
 import {
     CheckCircle, Clock, Truck, User, ArrowLeft,
     ArrowRightLeft, FileText, X, Navigation
@@ -18,6 +19,7 @@ const RED_ACCENT = '#FF4D4D';
 
 export default function MovementList({ navigation }) {
     const [movements, setMovements] = useState([]);
+    const [refreshing, setRefreshing] = useState(false);
 
     const loadMovements = async () => {
         const vehicleData = await getLocalMovements();
@@ -37,6 +39,21 @@ export default function MovementList({ navigation }) {
         });
         return unsubscribe;
     }, [navigation]);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            // Aggressively natively pull today's strict logs universally from Central Command MongoDB!
+            const logResp = await api.get('/logs/today');
+            if (logResp.data && logResp.data.length > 0) {
+                await syncDailyEntryLogsToLocal(logResp.data);
+            }
+        } catch (err) {
+            console.warn("Global Sync Failed mathematically", err.message);
+        }
+        await loadMovements();
+        setRefreshing(false);
+    };
 
 
     const renderItem = ({ item }) => (
@@ -113,6 +130,9 @@ export default function MovementList({ navigation }) {
                         data={movements}
                         keyExtractor={(item) => item.syncId || Math.random().toString()}
                         renderItem={renderItem}
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+                        }
                         ListEmptyComponent={
                             <View style={styles.empty}>
                                 <Text style={styles.emptyText}>NO OPERATIONAL RECORDS</Text>

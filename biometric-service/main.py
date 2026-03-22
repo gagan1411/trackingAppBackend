@@ -25,6 +25,10 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_cqQSoM7LrwGfYPoFVn
 # Do NOT commit hardcoded keys to a public GitHub repo!
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+@app.get("/")
+async def root():
+    return {"status": "Active", "message": "Supabase Central Face AI Operating Online"}
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "message": "Biometric engine actively listening"}
