@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
@@ -6,40 +5,23 @@ const DEFAULT_API_URL = 'https://backend-e4a6.onrender.com/api';
 
 const api = axios.create({
     baseURL: DEFAULT_API_URL,
-    timeout: 10000, // 10 seconds timeout for remote connections
+    timeout: 15000,
 });
 
 api.interceptors.request.use(async (config) => {
-    // Dynamically set baseURL if user configured one (Ignoring dead localtunnels!)
-    let customUrl = await SecureStore.getItemAsync('server_url');
-    if (customUrl && !customUrl.includes('localtunnel.me')) {
-        config.baseURL = customUrl.endsWith('/api') ? customUrl : `${customUrl}/api`;
-    } else {
-        config.baseURL = DEFAULT_API_URL;
-    }
-
+    // FORCEFULLY OVERRIDING OLD SETTINGS
+    // We are totally bypassing `localtunnel` AND any old `172.x` / `10.x` raw ips saved in the cache.
+    // The mobile app will ONLY dynamically use the live internet matrix URL right now!
+    config.baseURL = DEFAULT_API_URL;
+    
+    // Attempt standard authentication lookup
     const token = await SecureStore.getItemAsync('token');
     if (token) {
         config.headers['x-auth-token'] = token;
     }
     return config;
+}, (error) => {
+    return Promise.reject(error);
 });
-
-api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        const status = error?.response?.status;
-        if (status && status >= 400 && status < 500) {
-            // Client errors (400, 401, 403, etc.) are expected — don't show LogBox
-            console.warn('API Client Error:', status, error?.response?.data?.msg || error.message);
-        } else if (error.code === 'ECONNABORTED' || error.message?.includes('Network Error')) {
-            console.warn('API Network Error:', error.message);
-            Alert.alert('No Connection', 'Cannot reach server. Working in offline mode.');
-        } else {
-            console.error('API Error:', error.message);
-        }
-        return Promise.reject(error);
-    }
-);
 
 export default api;
