@@ -365,7 +365,36 @@ export const getEntryLogs = async () => {
 export const getPendingEntries = async () => {
     const db = await getDB();
     return await db.getAllAsync('SELECT * FROM entry_logs WHERE completed = 0 ORDER BY id DESC');
+};
 
+export const syncDailyEntryLogsToLocal = async (logs) => {
+    const db = await getDB();
+    for (const log of logs) {
+        const existing = await db.getFirstAsync('SELECT id FROM entry_logs WHERE syncId = ?', [log.syncId]);
+        if (!existing) {
+            await db.runAsync(
+                `INSERT INTO entry_logs (
+                    civilianId, name, village, type, timestamp, completed, syncId, category,
+                    purposeOfVisit, placeOfVisit, vehicleDetails, itemsCashCarried,
+                    animals, otherImpDetails, isInternational, passportDetails,
+                    visaDetails, flightTicketDetails, internationalCash,
+                    internationalOtherDetails, phoneCheckDetails
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    log.civilianId, log.name, log.village, log.type, log.timestamp, log.completed || 0, log.syncId, log.category,
+                    log.purposeOfVisit, log.placeOfVisit, log.vehicleDetails, log.itemsCashCarried,
+                    log.animals, log.otherImpDetails, log.isInternational ? 1 : 0, log.passportDetails,
+                    log.visaDetails, log.flightTicketDetails, log.internationalCash,
+                    log.internationalOtherDetails, log.phoneCheckDetails
+                ]
+            );
+        } else {
+            await db.runAsync(
+                'UPDATE entry_logs SET completed = ?, exitTimestamp = ? WHERE syncId = ?',
+                [log.completed || 0, log.exitTimestamp || null, log.syncId]
+            );
+        }
+    }
 };
 
 // ─── CIVILIAN MOVEMENTS (legacy) ───────────────────────────────────────────────

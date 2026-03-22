@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const DEFAULT_API_URL = 'http://172.20.10.7:5000/api';
+const DEFAULT_API_URL = 'https://backend-e4a6.onrender.com/api';
 
 const api = axios.create({
     baseURL: DEFAULT_API_URL,

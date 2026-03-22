@@ -8,8 +8,8 @@ COPY ./requirements.txt /code/requirements.txt
 # Install your Python packages
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-# Install OpenCV system dependencies (mandatory for CV2 on Linux computing platforms!)
-RUN apt-get update && apt-get install -y libgl1-mesa-glx
+# Install modern OpenCV system graphics dependencies (Debian Trixie and newer)
+RUN apt-get update && apt-get install -y libgl1 libglib2.0-0
 
 # Copy your backend code
 COPY . .
