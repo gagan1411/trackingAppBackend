@@ -5,7 +5,7 @@ dotenv.config();
 
 const addUser = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db');
+        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db', { family: 4, dbName: 'movement_db' });
 
         const username = 'kpsnegi12';
         const password = 'password123'; // Default password for testing

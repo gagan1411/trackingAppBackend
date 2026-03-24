@@ -19,28 +19,28 @@ import { WebView } from 'react-native-webview';
  *  - fitBounds (boolean): Auto-fit map to show all markers (default true when markers provided)
  */
 export default function LeafletMapView({
-    latitude = 34.5262,
-    longitude = 74.2546,
-    zoom = 17,
-    markerLat = null,
-    markerLng = null,
-    markers = [],
-    onMapPress,
-    onMarkerPress,
-    style,
-    mapType = 'satellite',
-    fitBounds = true,
+  latitude = 34.5262,
+  longitude = 74.2546,
+  zoom = 17,
+  markerLat = null,
+  markerLng = null,
+  markers = [],
+  onMapPress,
+  onMarkerPress,
+  style,
+  mapType = 'satellite',
+  fitBounds = true,
 }) {
-    const webViewRef = useRef(null);
+  const webViewRef = useRef(null);
 
-    const esriSatellite = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-    const esriStreet = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-    const tileUrl = mapType === 'satellite' ? esriSatellite : esriStreet;
-    const tileAttrib = 'Tiles &copy; Esri &mdash; Source: Esri, USGS, AeroGRID, IGN';
+  const esriSatellite = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  const esriStreet = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+  const tileUrl = mapType === 'satellite' ? esriSatellite : esriStreet;
+  const tileAttrib = 'Tiles &copy; Esri &mdash; Source: Esri, USGS, AeroGRID, IGN';
 
-    // Build multi-marker JS
-    const markersJSON = JSON.stringify(markers);
-    const multiMarkerScript = `
+  // Build multi-marker JS
+  const markersJSON = JSON.stringify(markers);
+  const multiMarkerScript = `
       // Clear previous markers
       if (window._markers) {
         window._markers.forEach(function(m) { m.remove(); });
@@ -102,9 +102,9 @@ export default function LeafletMapView({
       }
     `;
 
-    // Legacy single-marker support
-    const singleMarkerScript = (markerLat && markerLng)
-        ? `
+  // Legacy single-marker support
+  const singleMarkerScript = (markerLat && markerLng)
+    ? `
           if (window._singleMarker) { window._singleMarker.remove(); }
           window._singleMarker = L.marker([${markerLat}, ${markerLng}], {
               icon: L.divIcon({
@@ -115,14 +115,14 @@ export default function LeafletMapView({
               })
           }).addTo(window._map);
         `
-        : `if (window._singleMarker) { window._singleMarker.remove(); window._singleMarker = null; }`;
+    : `if (window._singleMarker) { window._singleMarker.remove(); window._singleMarker = null; }`;
 
-    const html = `
+  const html = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -190,47 +190,47 @@ export default function LeafletMapView({
 </html>
     `;
 
-    // When props change, update map view and markers
-    useEffect(() => {
-        if (webViewRef.current) {
-            const updateScript = markers.length > 0
-                ? multiMarkerScript
-                : `
+  // When props change, update map view and markers
+  useEffect(() => {
+    if (webViewRef.current) {
+      const updateScript = markers.length > 0
+        ? multiMarkerScript
+        : `
                     window._map.setView([${latitude}, ${longitude}], window._map.getZoom());
                     ${singleMarkerScript}
                   `;
-            webViewRef.current.injectJavaScript(updateScript + '\ntrue;');
-        }
-    }, [latitude, longitude, markerLat, markerLng, JSON.stringify(markers)]);
+      webViewRef.current.injectJavaScript(updateScript + '\ntrue;');
+    }
+  }, [latitude, longitude, markerLat, markerLng, JSON.stringify(markers)]);
 
-    const handleMessage = (event) => {
-        try {
-            const data = JSON.parse(event.nativeEvent.data);
-            if (data.type === 'MAP_PRESS' && onMapPress) {
-                onMapPress({ latitude: data.lat, longitude: data.lng });
-            }
-            if (data.type === 'MARKER_PRESS' && onMarkerPress) {
-                onMarkerPress({ index: data.index, lat: data.lat, lng: data.lng, label: data.label });
-            }
-        } catch (e) { }
-    };
+  const handleMessage = (event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'MAP_PRESS' && onMapPress) {
+        onMapPress({ latitude: data.lat, longitude: data.lng });
+      }
+      if (data.type === 'MARKER_PRESS' && onMarkerPress) {
+        onMarkerPress({ index: data.index, lat: data.lat, lng: data.lng, label: data.label });
+      }
+    } catch (e) { }
+  };
 
-    return (
-        <WebView
-            ref={webViewRef}
-            style={[styles.map, style]}
-            source={{ html }}
-            onMessage={handleMessage}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            originWhitelist={['*']}
-            mixedContentMode="always"
-            allowFileAccess={true}
-            scrollEnabled={false}
-        />
-    );
+  return (
+    <WebView
+      ref={webViewRef}
+      style={[styles.map, style]}
+      source={{ html }}
+      onMessage={handleMessage}
+      javaScriptEnabled={true}
+      domStorageEnabled={true}
+      originWhitelist={['*']}
+      mixedContentMode="always"
+      allowFileAccess={true}
+      scrollEnabled={true}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
-    map: { flex: 1 },
+  map: { flex: 1 },
 });

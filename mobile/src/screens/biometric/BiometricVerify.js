@@ -214,7 +214,7 @@ export default function BiometricVerify({ navigation }) {
                     console.log("API Response: ", apiResp.data);
                     if (apiResp.data) match = apiResp.data;
                 } catch (e) {
-                    console.log("Central MongoDB fetch failed or civilian truly not in MongoDB:", e.message);
+                    console.log("Central MongoDB fetch failed or civilian truly not in MongoDB:", e.response?.data);
                 }
 
                 if (match) {
@@ -224,7 +224,7 @@ export default function BiometricVerify({ navigation }) {
                     // Standardize MongoDB _id mapping to match the local format expected by the UI if missing
                     match.id = match.id || match._id;
                     setIdentifiedPerson(match);
-                    
+
                     // Fetch Historical Movement Logs explicitly from Backend
                     try {
                         const logResp = await api.get(`/logs/civilian/${match.id}`);
@@ -589,12 +589,12 @@ export default function BiometricVerify({ navigation }) {
                     text: 'OK', onPress: async () => {
                         setShowDetailModal(false);
                         resetMovementForm();
-                        
+
                         // Aggressively fetch logs to graphically dynamically update the timeline on the spot magically!
                         try {
                             const refResp = await api.get(`/logs/civilian/${person.id}`);
                             setRecentLogs(refResp.data || []);
-                        } catch (err) {}
+                        } catch (err) { }
                     }
                 }
             ]);
@@ -723,7 +723,7 @@ export default function BiometricVerify({ navigation }) {
                             <Text style={[styles.statusDisplay, person && { color: GREEN_ACCENT }]}>{status}</Text>
 
                             {/* Local DB Status Banner */}
-                            <View style={[styles.statusBanner, localTemplateCount > 0 ? styles.connectedBanner : styles.disconnectedBanner]}>
+                            {/*<View style={[styles.statusBanner, localTemplateCount > 0 ? styles.connectedBanner : styles.disconnectedBanner]}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                                     <Database color={localTemplateCount > 0 ? GREEN_ACCENT : 'rgba(255,255,255,0.5)'} size={14} />
                                     {localTemplateCount > 0 ? (
@@ -739,7 +739,7 @@ export default function BiometricVerify({ navigation }) {
                                         </>
                                     )}
                                 </View>
-                            </View>
+                            </View>*/}
 
                             {/* Scan Buttons */}
                             <View style={styles.bioGrid}>
@@ -857,11 +857,11 @@ export default function BiometricVerify({ navigation }) {
                                 </View>
 
                                 //... Omitted action button definitions (rendered successfully directly above) ...
-                                
+
                                 {/* RECENT MOVEMENTS TIMELINE */}
                                 {recentLogs.length > 0 && (
                                     <View style={{ marginTop: 5, paddingTop: 20, borderTopWidth: 1, borderTopColor: BORDER, marginBottom: 20 }}>
-                                        <Text style={[styles.sectionTitle, {color: 'rgba(255,255,255,0.4)', fontSize: 11}]}>RECENT MOVEMENT LOGS</Text>
+                                        <Text style={[styles.sectionTitle, { color: 'rgba(255,255,255,0.4)', fontSize: 11 }]}>RECENT MOVEMENT LOGS</Text>
                                         <View style={{ marginTop: 10, gap: 12 }}>
                                             {recentLogs.map((log, i) => (
                                                 <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -870,7 +870,7 @@ export default function BiometricVerify({ navigation }) {
                                                     </View>
                                                     <View style={{ flex: 1 }}>
                                                         <Text style={{ color: '#FFF', fontSize: 13, fontWeight: 'bold', letterSpacing: 0.5 }}>{log.type?.toUpperCase()} {log.placeOfVisit ? `- ${log.placeOfVisit.toUpperCase()}` : ''}</Text>
-                                                        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 4, fontWeight: 'bold' }}>{new Date(log.timestamp).toLocaleString([], { hour: '2-digit', minute:'2-digit', month:'short', day:'2-digit', year:'numeric' }).toUpperCase()}</Text>
+                                                        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 4, fontWeight: 'bold' }}>{new Date(log.timestamp).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase()}</Text>
                                                     </View>
                                                 </View>
                                             ))}
