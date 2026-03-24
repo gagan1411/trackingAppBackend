@@ -5,7 +5,7 @@ dotenv.config();
 
 const checkUsers = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db');
+        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db', { family: 4, dbName: 'movement_db' });
         const users = await User.find({}, 'username role password');
         console.log('Total users:', users.length);
         users.forEach(u => console.log(`- ${u.username} (${u.role})`));

@@ -6,7 +6,7 @@ dotenv.config();
 
 const createAdmin = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db');
+        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db', { family: 4, dbName: 'movement_db' });
         console.log('MongoDB Connected...');
 
         let admin = await User.findOne({ username: 'admin' });

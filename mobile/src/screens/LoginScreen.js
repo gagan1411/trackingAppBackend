@@ -178,20 +178,20 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
         }
 
         // ── Step 2: Fallback to local ──
-        if (!loggedIn) {
-          try {
-            const operator = await loginLocalOperator(username, password);
-            if (operator) {
-              await SecureStore.setItemAsync('token', 'local_token_' + (operator.id || 'offline'));
-              await SecureStore.setItemAsync('operator', operator.username);
-              loggedIn = true;
-            }
-          } catch (localErr) {
-            if (!serverReachable) {
-              throw new Error("Offline: This account is not registered on this device yet. Please register once while online.");
-            }
-          }
-        }
+        // if (!loggedIn) {
+        //   try {
+        //     const operator = await loginLocalOperator(username, password);
+        //     if (operator) {
+        //       await SecureStore.setItemAsync('token', 'local_token_' + (operator.id || 'offline'));
+        //       await SecureStore.setItemAsync('operator', operator.username);
+        //       loggedIn = true;
+        //     }
+        //   } catch (localErr) {
+        //     if (!serverReachable) {
+        //       throw new Error("Offline: This account is not registered on this device yet. Please register once while online.");
+        //     }
+        //   }
+        // }
 
         if (loggedIn) {
           setIsAuthenticated(true);
@@ -233,7 +233,7 @@ export default function RegistrationScreen({ setIsAuthenticated }) {
   };
 
   return (
-    <View style={{ flex: 1,backgroundColor: DARK }}>
+    <View style={{ flex: 1, backgroundColor: DARK }}>
       <StatusBar barStyle="light-content" backgroundColor={DARK} />
 
       <ImageBackground

@@ -5,7 +5,7 @@ const Civilian = require('./models/Civilian');
 
 const importData = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI);
+        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/movement_db', { family: 4, dbName: 'movement_db' });
         console.log('MongoDB perfectly connected...');
 
         const dataPath = '../biometric-service/ready_for_mongodb.json';

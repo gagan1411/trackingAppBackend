@@ -151,10 +151,12 @@ export default function OfflineMap({ navigation }) {
                         <View style={{ width: 28 }} />
                     </View>
 
-                    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled"
+                        scrollEnabled={false}
+                    >
 
                         <View style={styles.searchCard}>
-                            <View style={styles.metaRow}>
+                            {/* <View style={styles.metaRow}>
                                 <Shield color={GOLD} size={14} />
                                 <Text style={styles.metaText}>VILLAGE INTELLIGENCE DOWNLOADER</Text>
                                 <TouchableOpacity
@@ -163,9 +165,9 @@ export default function OfflineMap({ navigation }) {
                                 >
                                     <Layers size={16} color={GOLD} />
                                 </TouchableOpacity>
-                            </View>
+                            </View> */}
 
-                            <View style={[styles.inputWrapper, suggestions.length > 0 && styles.inputWithSuggestions]}>
+                            {/* <View style={[styles.inputWrapper, suggestions.length > 0 && styles.inputWithSuggestions]}>
                                 <Search size={18} color="rgba(255,255,255,0.3)" style={{ marginHorizontal: 15 }} />
                                 <TextInput
                                     style={styles.input}
@@ -212,7 +214,7 @@ export default function OfflineMap({ navigation }) {
                                     <View style={[styles.progressBar, { width: `${downloadProgress * 100}%` }]} />
                                     <Text style={styles.progressLabel}>{Math.round(downloadProgress * 100)}% ENCRYPTING TILES</Text>
                                 </View>
-                            )}
+                            )} */}
                         </View>
 
                         <View style={styles.mapFrame}>

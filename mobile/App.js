@@ -26,9 +26,9 @@ export default function App() {
       }
 
       // console.log('hello', await RNFS.readDirAssets(sourceFolder));
-      console.log(`Copying images from assets/${sourceFolder} to ${destFolder}`);
+      // console.log(`Copying images from assets/${sourceFolder} to ${destFolder}`);
       const files = await RNFS.readDirAssets(sourceFolder);
-      console.log('Files found: ', files);
+      // console.log('Files found: ', files);
 
       for (const file of files) {
         const destPath = destFolder + '/' + file.name;
@@ -37,14 +37,14 @@ export default function App() {
         const check = await RNFS.exists(
           RNFS.DocumentDirectoryPath + "/Galuta/files/" + file.name
         );
-        console.log("Image exists:", check);
-        console.log(`Checking ${file.name}: exists in internal storage?`, fileExists);
+        // console.log("Image exists:", check);
+        // console.log(`Checking ${file.name}: exists in internal storage?`, fileExists);
         if (!fileExists) {
           await RNFS.copyFileAssets(
             sourceFolder + '/' + file.name,
             destPath
           );
-          console.log(`Copied ${file.name} to ${destPath}`);
+          // console.log(`Copied ${file.name} to ${destPath}`);
         }
       }
 
@@ -60,9 +60,9 @@ export default function App() {
       }
 
       // console.log('hello', await RNFS.readDirAssets(sourceFolder));
-      console.log(`Copying images from assets/${sourceFolder} to ${destFolder}`);
+      // console.log(`Copying images from assets/${sourceFolder} to ${destFolder}`);
       const files = await RNFS.readDirAssets(sourceFolder);
-      console.log('Files found: ', files);
+      // console.log('Files found: ', files);
 
       for (const file of files) {
         const destPath = destFolder + '/' + file.name;
@@ -71,8 +71,8 @@ export default function App() {
         const check = await RNFS.exists(
           RNFS.DocumentDirectoryPath + "/Galuta/persImages/" + file.name
         );
-        console.log("Image exists:", check);
-        console.log(`Checking ${file.name}: exists in internal storage?`, fileExists);
+        // console.log("Image exists:", check);
+        // console.log(`Checking ${file.name}: exists in internal storage?`, fileExists);
         if (!fileExists) {
           await RNFS.copyFileAssets(
             sourceFolder + '/' + file.name,
@@ -91,6 +91,7 @@ export default function App() {
 
       // Check Auth
       const token = await SecureStore.getItemAsync('token');
+      console.log('token: ', token);
       setIsAuthenticated(!!token);
 
       setIsReady(true);
